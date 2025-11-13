@@ -131,16 +131,64 @@ const getStopByCod = async (req, res) => {
   try {
     const { cod } = req.params;
     // Include 'dateNotActive' in the SELECT clause
-    const query = 'SELECT id, cod, lat, lon, nam, ref FROM "Stop" WHERE cod = $1';
+    const query = `
+      SELECT s.id, s.cod, s.lat, s.lon, s.nam, s.ref,
+             l.id AS lineid, l.cod AS line_code, l.nam AS line_name, l.act AS line_active, l.color AS line_color, l.typ AS line_type
+      FROM "Stop" s
+      LEFT JOIN "SubLineStop" ss ON s.id = ss.stopid
+      LEFT JOIN "SubLine" sl ON ss.sublineid = sl.id
+      LEFT JOIN "RouteLine" l ON sl.lineid = l.id 
+      WHERE s.cod = $1
+      ORDER BY l.cod, sl.cod;
+    `;
     const result = await pool.query(query, [cod]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Stop not found' });
     }
+    // The result might have multiple rows if the stop is on multiple lines/sublines.
+    // Group the line information for the response.
+    const stopData = { ...result.rows[0] }; // Start with the first row's stop data
+    const lines = [];
+
+    result.rows.forEach(row => {
+      // If the line details exist in the row, add them to the lines array
+      if (row.lineid !== null) { // Check if the join found a line
+        const lineInfo = {
+          id: row.linid,
+          cod: row.line_code,
+          nam: row.line_name,
+          act: row.line_active,
+          color: row.line_color,
+          typ: row.line_type,
+          // Optionally, include subline info if needed
+          // subline_api_id: row.subline_api_id, // This would be from the sl table if selected
+          // subline_code: row.subline_code,     // This would be from the sl table if selected
+        };
+
+        // Avoid duplicates if a stop appears multiple times for the same line due to different sublines
+        // This assumes line_api_id uniquely identifies a line entry in the result set for this stop
+        // If you need to distinguish by subline within the lines array, adjust the logic
+        if (!lines.some(l => l.id === lineInfo.id)) {
+            lines.push(lineInfo);
+        }
+      }
+    });
+
+    // Attach the lines array to the stop data object
+    stopData.lines = lines;
+
+    // Remove the individual line columns from the final stop object
+    delete stopData.lineid;
+    delete stopData.line_code;
+    delete stopData.line_name;
+    delete stopData.line_active;
+    delete stopData.line_color;
+    delete stopData.line_type;
 
     res.status(200).json({
       success: true,
-      data: result.rows[0], // Send the row under an explicit 'data' key
+      data: stopData, // Send the stop data with the attached lines array
     });
   } catch (error) {
     console.error('Error fetching stop by cod:', error);
