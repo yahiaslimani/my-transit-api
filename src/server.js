@@ -5,6 +5,7 @@ const { connectDB } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
+const sublineRoutes = require('./routes/sublines');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,7 @@ connectDB();
 // Define routes
 app.use('/api/stops', stopRoutes);
 app.use('/api/lines', lineRoutes);
+app.use('/api/sublines', sublineRoutes);
 
 // Use error handler middleware
 app.use(errorHandler);
