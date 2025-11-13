@@ -167,12 +167,12 @@ const getSubLineById = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
-const getSubLineByLineId = async (req, res) => {
+const getSubLineByLineCode = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { linecod } = req.params;
     // Include 'dateNotActive' in the SELECT clause
-    const query = 'SELECT id, lineid, vis, cod, nam, way, main FROM "SubLine" WHERE lineid = $1';
-    const result = await pool.query(query, [id]);
+    const query = 'select s.id, s.lineid, s.vis, s.cod, s.nam, s.way, s.main FROM "SubLine" s join "RouteLine" r on r.id = s.lineid WHERE r.cod = $1';
+    const result = await pool.query(query, [linecod]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Line not found' });
@@ -180,7 +180,7 @@ const getSubLineByLineId = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: result.rows[0], // Send the row under an explicit 'data' key
+      data: result.rows, // Send the row under an explicit 'data' key
     });
   } catch (error) {
     console.error('Error fetching line by lineid:', error);
@@ -192,5 +192,5 @@ module.exports = {
   getAllSubLines,
   getSubLineByCod,
   getSubLineById,
-  getSubLineByLineId,
+  getSubLineByLineCode,
 };
