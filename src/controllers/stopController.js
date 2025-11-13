@@ -149,6 +149,7 @@ const getStopByCod = async (req, res) => {
     // The result might have multiple rows if the stop is on multiple lines/sublines.
     // Group the line information for the response.
     const stopData = { ...result.rows[0] }; // Start with the first row's stop data
+    console.log(result.rows[0]);
     const lines = [];
 
     result.rows.forEach(row => {
