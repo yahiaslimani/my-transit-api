@@ -36,9 +36,9 @@ app.get('/', (req, res) => {
   res.json({ message: 'Transit API is running!' });
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// Start the main server
+const server = app.listen(PORT, () => {
+  console.log(`Main server is running on port ${PORT}`);
 });
 
 // Start the real-time processor service *after* the main server starts
