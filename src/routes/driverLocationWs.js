@@ -17,6 +17,14 @@ function attachDriverLocationWS(server) {
 
     driverConnections.add(ws);
 
+    // Broadcast to all connected clients except sender
+    wss.clients.forEach((client) => {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(message.toString());
+      }
+    });
+    
+/*
     ws.on('message', (data) => {
       try {
         const messageStr = data.toString();
@@ -49,7 +57,7 @@ function attachDriverLocationWS(server) {
          ws.send(JSON.stringify({ type: 'error', message: 'Server error processing message' }));
       }
     });
-
+*/
     ws.on('close', () => {
       console.log('Driver app disconnected from /api/driver-location-ws');
       driverConnections.delete(ws);
