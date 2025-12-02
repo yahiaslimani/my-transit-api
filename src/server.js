@@ -7,6 +7,7 @@ const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
+const realtimeProcessor = require('./services/realtimeProcessor'); // Import the processor module
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,4 +39,29 @@ app.get('/', (req, res) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});
+
+// Start the real-time processor service *after* the main server starts
+server.on('listening', () => {
+    console.log('Main server listening, starting real-time processor...');
+    realtimeProcessor.start(); // Start the phone WS client and output WS server
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  realtimeProcessor.stop(); // Stop the processors
+  server.close(() => {
+    console.log('Process terminated.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  realtimeProcessor.stop(); // Stop the processors
+  server.close(() => {
+    console.log('Process terminated.');
+    process.exit(0);
+  });
 });
