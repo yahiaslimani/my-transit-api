@@ -3,6 +3,7 @@ require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
 const http = require('http'); // Need the raw HTTP server
 const WebSocket = require('ws'); // Import ws for output server
+const path = require('path');
 const { connectDB } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
