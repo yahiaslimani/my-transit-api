@@ -77,7 +77,7 @@ server.listen(PORT, () => {
   // }, PROCESSING_INTERVAL_MS);
 });
 
-
+/*
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
@@ -96,3 +96,4 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+*/
