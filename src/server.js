@@ -7,7 +7,8 @@ const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
-const realtimeProcessor = require('./services/realtimeProcessor'); // Import the processor module
+const { attachDriverLocationWS } = require('./routes/driverLocationWs'); // Import the driver WS setup
+const realtimeProcessor = require('./services/realtimeProcessor'); // Import the processor
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,16 +37,44 @@ app.get('/', (req, res) => {
   res.json({ message: 'Transit API is running!' });
 });
 
-// Start the main server
-const server = app.listen(PORT, () => {
-  console.log(`Main server is running on port ${PORT}`);
+// Create the HTTP server instance using Express app
+const server = http.createServer(app);
+
+// Attach the driver location WebSocket *before* starting the server
+attachDriverLocationWS(server);
+
+// Create the output WebSocket server instance (for passenger app)
+const outputWsServer = new WebSocket.Server({ noServer: true, path: '/api/passenger-realtime-ws' }); // Define a path for output
+
+// Handle upgrade requests for the output WebSocket
+server.on('upgrade', (request, socket, head) => {
+  // Check if the upgrade request is for the output WebSocket path
+  if (request.url === '/api/passenger-realtime-ws') {
+    outputWsServer.handleUpgrade(request, socket, head, (ws) => {
+      outputWsServer.emit('connection', ws, request);
+    });
+  } else {
+    // If it's not for the output WS path, let Express handle it or deny
+    socket.destroy(); // Deny upgrade for unknown paths
+  }
 });
 
-// Start the real-time processor service *after* the main server starts
-server.on('listening', () => {
-    console.log('Main server listening, starting real-time processor...');
-    realtimeProcessor.start(); // Start the phone WS client and output WS server
+// Start the main HTTP server
+server.listen(PORT, () => {
+  console.log(`Main server is running on port ${PORT}`);
+
+  // Now that the HTTP server is listening, initialize the real-time processor
+  // Pass the output WebSocket server instance to it
+  console.log('Initializing real-time processor...');
+  realtimeProcessor.start(outputWsServer); // Pass the output server instance
+
+  // Optional: Set up a periodic task for complex calculations like 'esta-info' or 'stop' detection
+  // setInterval(async () => {
+  //   // Iterate through activeBusStates and perform calculations
+  //   console.log('Periodic processing task running...');
+  // }, PROCESSING_INTERVAL_MS);
 });
+
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
