@@ -11,7 +11,7 @@ const driverConnections = new Set();
  */
 function attachDriverLocationWS(server) {
   //const wss = new WebSocket.Server({ port: process.env.PORT || 3000 }); // Define the path
-  const wss = new WebSocket.Server({ server, port: process.env.PORT || 3000 }); // Define the path
+  const wss = new WebSocket.Server({ server }); // Define the path
 
   wss.on('connection', (ws, req) => {
     console.log('Driver app connected to /api/driver-location-ws');
