@@ -42,7 +42,7 @@ app.get('/', (req, res) => {
 });
 
 // Create WebSocket server
-const wss = new WebSocket.Server({ port: PORT });
+const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (socket, req) => {
   const url = req.url;
