@@ -2,74 +2,87 @@
 const WebSocket = require('ws');
 const { processLocationData } = require('../services/realtimeProcessor'); // Import the processing function
 
-// Store WebSocket connections if needed for management (optional)
-const driverConnections = new Set();
+// Store active passenger connections
+const passengerConnections = new Set();
 
-/**
- * Attaches the driver location WebSocket route to the main HTTP server.
- * @param {http.Server} server - The main HTTP server instance from Express.
- */
-function attachDriverLocationWS(server) {
-  //const wss = new WebSocket.Server({ port: process.env.PORT || 3000 }); // Define the path
-  const wss = new WebSocket.Server({ server }); // Define the path
-
-  wss.on('connection', (ws, req) => {
-    console.log('Driver app connected to /api/driver-location-ws');
-
-    driverConnections.add(ws);
-
-    ws.on('message', (data) => {
-      try {
-        const messageStr = data.toString();
-        console.log('Raw message received from driver app:', messageStr);
-
-        let parsedData;
-        try {
-          // Attempt to parse the received string as JSON
-          parsedData = JSON.parse(messageStr);
-        } catch (e) {
-          console.error('Error parsing message from driver app as JSON:', e);
-          console.log('Problematic message:', messageStr);
-          // Optionally, send an error message back to the client
-          ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON received' }));
-          return; // Exit if parsing fails
-        }
-
-        console.log('Parsed data from driver app:', parsedData);
-
-        if (parsedData && typeof parsedData === 'object' && parsedData.busId) {
-          // Process the parsed data using the function from realtimeProcessor
-          processLocationData(parsedData);
-        } else {
-          console.warn('Received message from driver app is not a valid object with busId:', parsedData);
-          ws.send(JSON.stringify({ type: 'error', message: 'Valid object with busId required' }));
-        }
-      } catch (error) {
-        console.error('Error processing message from driver app:', error);
-        // Optionally, send an error message back
-         ws.send(JSON.stringify({ type: 'error', message: 'Server error processing message' }));
+function handleDriverConnection(socket) {
+  console.log('Driver connected to /api/driver-location-ws');
+  
+  socket.on('message', (data) => {
+    try {
+      // Parse incoming driver data
+      const driverData = JSON.parse(data.toString());
+      
+      // Validate required fields
+      if (typeof driverData.lat !== 'number' || typeof driverData.lng !== 'number') {
+        console.error('Invalid location data received:', driverData);
+        return;
       }
-    });
-
-    ws.on('close', () => {
-      console.log('Driver app disconnected from /api/driver-location-ws');
-      driverConnections.delete(ws);
-    });
-
-    ws.on('error', (error) => {
-      console.error('Error in driver app WebSocket connection:', error);
-      driverConnections.delete(ws); // Clean up on error
-    });
-
-    // Optionally, send a welcome message
-    // ws.send(JSON.stringify({ type: 'connected', message: 'Connected to driver location service' }));
+      
+      // Process/modify data as needed (currently keeping it the same)
+      const processedData = {
+        ...driverData,
+        // Add server timestamp if needed
+        serverTimestamp: new Date().toISOString(),
+        // Example of potential modifications:
+        // processedVelocity: `${driverData.velocity} m/s`
+      };
+      
+      // Broadcast to all passengers
+      const payload = JSON.stringify(processedData);
+      const disconnected = [];
+      
+      for (const passengerSocket of passengerConnections) {
+        if (passengerSocket.readyState === WebSocket.OPEN) {
+          passengerSocket.send(payload);
+        } else {
+          disconnected.push(passengerSocket);
+        }
+      }
+      
+      // Clean up disconnected passengers
+      for (const socket of disconnected) {
+        passengerConnections.delete(socket);
+      }
+      
+      console.log(`Broadcasted to ${passengerConnections.size} passengers:`, processedData);
+    } catch (error) {
+      console.error('Error processing driver message:', error);
+      console.error('Raw data:', data.toString());
+    }
   });
-
-  wss.on('error', (error) => {
-    console.error('WebSocket Server Error on /api/driver-location-ws:', error);
+  
+  socket.on('close', () => {
+    console.log('Driver disconnected from /api/driver-location-ws');
   });
-
-  console.log('Driver location WebSocket server attached to path /api/driver-location-ws');
+  
+  socket.on('error', (error) => {
+    console.error('Driver connection error:', error);
+  });
 }
 
-module.exports = { attachDriverLocationWS };
+// Handle passenger connections
+function handlePassengerConnection(socket) {
+  console.log('Passenger connected to /api/passenger-realtime-ws');
+  passengerConnections.add(socket);
+  
+  // Send welcome message
+  socket.send(JSON.stringify({
+    type: 'connection',
+    message: 'Connected to real-time location service',
+    timestamp: new Date().toISOString()
+  }));
+  
+  // Handle passenger disconnection
+  socket.on('close', () => {
+    passengerConnections.delete(socket);
+    console.log('Passenger disconnected. Active passengers:', passengerConnections.size);
+  });
+  
+  socket.on('error', (error) => {
+    console.error('Passenger connection error:', error);
+    passengerConnections.delete(socket);
+  });
+}
+
+module.exports = { handleDriverConnection, handlePassengerConnection };

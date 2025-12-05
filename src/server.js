@@ -39,25 +39,18 @@ app.get('/', (req, res) => {
   res.json({ message: 'Transit API is running!' });
 });
 
-// Create the HTTP server instance using Express app
-const server = http.createServer(app);
+// Create WebSocket server
+const wss = new WebSocket.Server({ port: PORT });
 
-// Attach the driver location WebSocket *before* starting the server
-attachDriverLocationWS(server);
-
-// Create the output WebSocket server instance (for passenger app)
-const outputWsServer = new WebSocket.Server({ noServer: true, path: '/api/passenger-realtime-ws' }); // Define a path for output
-
-// Handle upgrade requests for the output WebSocket
-server.on('upgrade', (request, socket, head) => {
-  // Check if the upgrade request is for the output WebSocket path
-  if (request.url === '/api/passenger-realtime-ws') {
-    outputWsServer.handleUpgrade(request, socket, head, (ws) => {
-      outputWsServer.emit('connection', ws, request);
-    });
+wss.on('connection', (socket, req) => {
+  const url = req.url;
+  
+  if (url === '/api/driver-location-ws') {
+    handleDriverConnection(socket);
+  } else if (url === '/api/passenger-realtime-ws') {
+    handlePassengerConnection(socket);
   } else {
-    // If it's not for the output WS path, let Express handle it or deny
-    socket.destroy(); // Deny upgrade for unknown paths
+    socket.close(1008, 'Invalid endpoint');
   }
 });
 
