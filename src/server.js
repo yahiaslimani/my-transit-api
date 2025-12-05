@@ -9,7 +9,7 @@ const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
-const { attachDriverLocationWS } = require('./routes/driverLocationWs'); // Import the driver WS setup
+const { handleDriverConnection, handlePassengerConnection } = require('./routes/driverLocationWs'); // Import the driver WS setup
 const realtimeProcessor = require('./services/realtimeProcessor'); // Import the processor
 
 const app = express();
@@ -59,24 +59,20 @@ wss.on('connection', (socket, req) => {
 // Start the main HTTP server
 server.listen(PORT, () => {
   console.log(`Main server is running on port ${PORT}`);
+  console.log(`Driver endpoint: /api/driver-location-ws`);
+  console.log(`Passenger endpoint: /api/passenger-realtime-ws`);
 
-  // Now that the HTTP server is listening, initialize the real-time processor
-  // Pass the output WebSocket server instance to it
+  // Initialize the real-time processor if needed
+  // Note: You may need to adjust how you pass the WebSocket server to the processor
+  // based on your existing realtimeProcessor implementation
   console.log('Initializing real-time processor...');
-  realtimeProcessor.start(outputWsServer); // Pass the output server instance
-
-  // Optional: Set up a periodic task for complex calculations like 'esta-info' or 'stop' detection
-  // setInterval(async () => {
-  //   // Iterate through activeBusStates and perform calculations
-  //   console.log('Periodic processing task running...');
-  // }, PROCESSING_INTERVAL_MS);
+  // realtimeProcessor.start(wss); // Uncomment and adjust if needed
 });
 
-/*
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
-  realtimeProcessor.stop(); // Stop the processors
+  // realtimeProcessor.stop(); // Stop the processors if you have this
   server.close(() => {
     console.log('Process terminated.');
     process.exit(0);
@@ -85,10 +81,9 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
-  realtimeProcessor.stop(); // Stop the processors
+  // realtimeProcessor.stop(); // Stop the processors if you have this
   server.close(() => {
     console.log('Process terminated.');
     process.exit(0);
   });
 });
-*/
