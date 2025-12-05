@@ -10,21 +10,13 @@ const driverConnections = new Set();
  * @param {http.Server} server - The main HTTP server instance from Express.
  */
 function attachDriverLocationWS(server) {
-  const wss = new WebSocket.Server({ server, path: '/api/driver-location-ws' }); // Define the path
+  const wss = new WebSocket.Server({ port: process.env.PORT || 3000 }); // Define the path
 
   wss.on('connection', (ws, req) => {
     console.log('Driver app connected to /api/driver-location-ws');
 
     driverConnections.add(ws);
 
-    // Broadcast to all connected clients except sender
-    wss.clients.forEach((client) => {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(message.toString());
-      }
-    });
-    
-/*
     ws.on('message', (data) => {
       try {
         const messageStr = data.toString();
@@ -57,7 +49,7 @@ function attachDriverLocationWS(server) {
          ws.send(JSON.stringify({ type: 'error', message: 'Server error processing message' }));
       }
     });
-*/
+
     ws.on('close', () => {
       console.log('Driver app disconnected from /api/driver-location-ws');
       driverConnections.delete(ws);
