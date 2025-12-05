@@ -34,6 +34,8 @@ app.use('/api/sublines', sublineRoutes);
 // Use error handler middleware
 app.use(errorHandler);
 
+const server = http.createServer(app);
+
 // Basic route for testing
 app.get('/', (req, res) => {
   res.json({ message: 'Transit API is running!' });
