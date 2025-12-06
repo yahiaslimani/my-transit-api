@@ -65,8 +65,9 @@ async function matchBusToSubline(busId, lat, lon, speed, heading) {
       WHERE ST_DistanceSphere(ST_Point(lon, lat), ST_Point($1, $2)) < $3
       ORDER BY ST_DistanceSphere(ST_Point(lon, lat), ST_Point($1, $2)) ASC;
     `;
+    console.log(`(${lat}, ${lon})`);
     const nearbyStopsResult = await pool.query(nearbyStopsQuery, [lon, lat, proximityThresholdMeters]);
-
+    console.log(nearbyStopsQuery.rows.length);
     if (nearbyStopsResult.rows.length === 0) {
       console.log(`[${busId}] No stops found near current location (${lat}, ${lon}).`);
       return null;
