@@ -9,7 +9,7 @@ const PROCESSING_INTERVAL_MS = 5000; // How often to potentially send 'esta-info
 
 // --- Constants for Direction Detection ---
 const MIN_SIGNALS_FOR_DIRECTION = 3; // Minimum number of recent signals needed to attempt direction detection
-const MIN_DISTANCE_THRESHOLD_METERS = 50.0; // Minimum distance between consecutive points to consider for bearing calculation
+const MIN_DISTANCE_THRESHOLD_METERS = 1.0; // Minimum distance between consecutive points to consider for bearing calculation
 const DIRECTION_MATCH_THRESHOLD_DEGREES = 45.0; // Max angle difference between bus bearing and route bearing to consider a match
 
 // --- In-Memory Storage for Bus States ---
