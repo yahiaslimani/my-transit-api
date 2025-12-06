@@ -20,6 +20,7 @@ function handleDriverConnection(socket) {
       }
       
       // Process/modify data as needed (currently keeping it the same)
+      processLocationData(driverData);
       const processedData = {
         ...driverData,
         // Add server timestamp if needed
