@@ -67,7 +67,7 @@ async function matchBusToSubline(busId, lat, lon, speed, heading) {
     `;
     console.log(`(${lat}, ${lon})`);
     const nearbyStopsResult = await pool.query(nearbyStopsQuery, [lon, lat, proximityThresholdMeters]);
-    console.log(nearbyStopsQuery.rows.length);
+    console.log(nearbyStopsResult.rows.length);
     if (nearbyStopsResult.rows.length === 0) {
       console.log(`[${busId}] No stops found near current location (${lat}, ${lon}).`);
       return null;
