@@ -149,7 +149,7 @@ async function processLocationData(rawData) {
   // Get previous state if available
   const previousState = activeBusStates.get(busId);
   // --- Determine/Confirm rt_id (Subline ID) ---
-  currentRtId = await matchBusToSubline(busId, /*lat*/7.7476606, /*lng*/35.267647, /*velocity*/30);
+  currentRtId = await matchBusToSubline(busId, /*lat*/35.267647, /*lng*/7.7476606, /*velocity*/30);
   if (currentRtId === null) {
     console.warn(`[${busId}] Could not determine rt_id for current location. Cannot process further.`);
     // Update state with new data but rt_id is null
