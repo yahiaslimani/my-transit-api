@@ -82,10 +82,13 @@ function calculateAverageBearing(coordHistory) {
   for (let i = 1; i < coordHistory.length; i++) {
     const prevCoord = coordHistory[i - 1];
     const currCoord = coordHistory[i];
+    console.log("prevCoord= " + prevCoord);
+    console.log("currCoord= " + currCoord);
     const distance = haversineDistance(prevCoord.lat, prevCoord.lon, currCoord.lat, currCoord.lon);
-
+    console.log("distance= " + distance);
     if (distance >= MIN_DISTANCE_THRESHOLD_METERS) {
       const bearing = calculateBearing(prevCoord.lat, prevCoord.lon, currCoord.lat, currCoord.lon);
+      console.log("bearing= " + bearing);
       bearings.push(bearing);
     }
   }
