@@ -9,8 +9,7 @@ const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
-const { handleDriverConnection, handlePassengerConnection } = require('./routes/driverLocationWs'); // Import the driver WS setup
-const { realtimeProcessor, processLocationData, broadcastToRouteClients, initializeBroadcastFunction } = require('./services/realtimeProcessor'); // Import the processor
+const { broadcastToRouteClients, initializeBroadcastFunction } = require('./services/realtimeProcessor'); // Import the processor
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -134,26 +133,6 @@ server.on('upgrade', (request, socket, head) => {
 // --- NEW: Broadcast Function for Specific Routes ---
 // This function will be called by the realtimeProcessor
 function broadcastToRouteClients(rtId, message) {
-  // Determine the main routeId from the rt_id if needed.
-  // For example, if rt_id is "L101-1-way", the routeId might be "101".
-  // You might need a helper function or a lookup table (rt_id -> routeId) if the format is complex.
-  // For now, let's assume rt_id itself is used as the route identifier for the broadcast map,
-  // OR that the processor calculates the main routeId from the rt_id before calling this function.
-  // The most common scenario is that rt_id *is* the subline id (e.g., SubLine.id from the DB),
-  // and you might want to broadcast to clients subscribed to the *main* RouteLine.
-  // Let's assume the processor knows the main routeId associated with the rt_id.
-
-  // For this example, let's assume rt_id corresponds directly to the routeId used in the URL (e.g., rt_id = 101, URL = /101)
-  // OR, more accurately, rt_id corresponds to a specific subline, and clients connect to the *main* route ID.
-  // We need a mapping from rt_id (subline) to the main routeId (line).
-  // This could be fetched from the DB or cached. Let's call a helper function for now.
-  // const routeId = getRouteIdFromRtId(rtId); // Implement this helper if needed
-
-  // For now, let's assume rt_id *is* the routeId for simplicity in this broadcast function.
-  // In reality, you might want to broadcast to the main 'routeId' (e.g., L101) which encompasses multiple sublines (rt_ids like L101-1-way, L101-1-back).
-  // This requires fetching the main line ID from the SubLine table using the rt_id.
-  // Let's assume the processor calculates the main routeId before calling this broadcast function.
-
   const routeId = getMainRouteIdFromRtId(rtId); // You need to implement this helper function
 
   if (routeId) {
@@ -201,6 +180,9 @@ async function getMainRouteIdFromRtId(rtId) {
 // We need to pass the broadcast function to the processor.
 initializeBroadcastFunction(broadcastToRouteClients); // Pass the new broadcast function
 
+// --- Call the injection function ---
+// This should happen *after* broadcastToRouteClients is defined
+require('./services/realtimeProcessor').injectBroadcastFunction(broadcastToRouteClients);
 
 server.listen(PORT, () => {
   console.log(`Main server is running on port ${PORT}`);
