@@ -84,8 +84,8 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
 /**
  * Calculates an average bearing from a sequence of coordinates.
  * Only considers segments longer than MIN_MOVEMENT_THRESHOLD_METERS.
- * @param {Array<{lat: number, lon: number}>} coordHistory - Array of coordinate objects [{lat, lon}, ...]
- * @returns {number|null} Average bearing in degrees (0-360) or null if insufficient data or invalid coordinates.
+ * @param {Array<{lat: number, lon: number, timestamp?: string}>} coordHistory - Array of coordinate objects [{lat, lng, timestamp?}, ...]
+ * @returns {number|null} Average bearing in degrees (0-360) or null if insufficient data or valid coordinates.
  */
 function calculateAverageBearing(coordHistory) {
   if (coordHistory.length < 2) {
@@ -98,15 +98,15 @@ function calculateAverageBearing(coordHistory) {
     const prevCoord = coordHistory[i - 1];
     const currCoord = coordHistory[i];
 
-    // Validate coordinate objects
-    if (!prevCoord || !currCoord || typeof prevCoord.lat !== 'number' || typeof prevCoord.lon !== 'number' ||
-      typeof currCoord.lat !== 'number' || typeof currCoord.lon !== 'number' ||
-      isNaN(prevCoord.lat) || isNaN(prevCoord.lon) || isNaN(currCoord.lat) || isNaN(currCoord.lon)) {
-      console.error('[Calculation] Invalid coordinate object in history:', { prevCoord, currCoord });
+    // Validate *individual* coordinate objects within the history array
+    if (!prevCoord || !currCoord || typeof prevCoord.lat !== 'number' || typeof prevCoord.lng !== 'number' ||
+      typeof currCoord.lat !== 'number' || typeof currCoord.lng !== 'number' ||
+      isNaN(prevCoord.lat) || isNaN(prevCoord.lng) || isNaN(currCoord.lat) || isNaN(currCoord.lng)) {
+      console.error('[Calculation] Invalid coordinate object in history array:', { prevCoord, currCoord });
       continue; // Skip this pair if invalid
     }
 
-    const distance = haversineDistance(prevCoord.lat, prevCoord.lon, currCoord.lat, currCoord.lon);
+    const distance = haversineDistance(prevCoord.lat, prevCoord.lng, currCoord.lat, currCoord.lng);
 
     // Check for NaN from haversineDistance
     if (isNaN(distance)) {
@@ -115,7 +115,7 @@ function calculateAverageBearing(coordHistory) {
     }
 
     if (distance >= MIN_MOVEMENT_THRESHOLD_METERS) {
-      const bearing = calculateBearing(prevCoord.lat, prevCoord.lon, currCoord.lat, currCoord.lon);
+      const bearing = calculateBearing(prevCoord.lat, prevCoord.lng, currCoord.lat, currCoord.lng);
       if (bearing !== null) { // Check if calculateBearing succeeded
         bearings.push(bearing);
         console.log(`[Calculation] Calculated bearing ${bearing.toFixed(2)}° for segment ${i - 1} -> ${i} (dist: ${distance.toFixed(2)}m)`);
@@ -147,7 +147,7 @@ function calculateAverageBearing(coordHistory) {
 
 /**
  * Fetches the ordered list of stops and their coordinates for sublines associated with a given main RouteLine ID.
- * @param {number} routeId - The ID of the main RouteLine (e.g., L101).
+ * @param {number} routeId - The ID of the main RouteLine (e.g., 3227).
  * @returns {Promise<Map<number, Array<{id: number, cod: string, lat: number, lon: number, nam: string, ref: string, dateNotActive: string}>>|null>}
  *          A Map where the key is the subline ID (rt_id) and the value is the array of ordered stops for that subline,
  *          or null on error.
@@ -164,6 +164,7 @@ async function getOrderedStopsForRouteSublines(routeId) {
         s.lon AS stop_lon,
         s.nam AS stop_nam,
         s.ref AS stop_ref,
+        s."dateNotActive" AS stop_date_not_active,
         sls.stoporder AS stop_order
       FROM "SubLine" sl
       JOIN "SubLineStop" sls ON sl.id = sls.sublineid
@@ -213,8 +214,8 @@ async function getOrderedStopsForRouteSublines(routeId) {
  * This function first fetches the sublines belonging to the route, then compares the average bearing derived
  * from the history against the bearing between consecutive stops on *those specific sublines*.
  * @param {string} busId - The unique ID of the bus.
- * @param {number} routeId - The ID of the main route the bus is assigned to (e.g., L101).
- * @param {Array<{lat: number, lon: number}>} coordHistory - Recent GPS coordinates of the bus.
+ * @param {number} routeId - The ID of the main route the bus is assigned to (e.g., 3227).
+ * @param {Array<{lat: number, lon: number, timestamp?: string}>} coordHistory - Recent GPS coordinates of the bus.
  * @returns {Promise<number|null>} The matched rt_id (subline.id) or null if no match is found.
  */
 async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) {
@@ -225,7 +226,7 @@ async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) 
     return null;
   }
 
-  const avgBearing = calculateAverageBearing(coordHistory);
+  const avgBearing = calculateAverageBearing(coordHistory); // Pass the whole history array
   if (avgBearing === null) {
     console.log(`[${busId}] Could not calculate average bearing from history.`);
     return null;
