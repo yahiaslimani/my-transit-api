@@ -2,8 +2,6 @@
 const { pool } = require('../config/database'); // Import your DB connection pool
 
 // --- Configuration ---
-const PHONE_WS_URL = process.env.PHONE_WS_URL || 'ws://localhost:8080/driver-location-ws'; // URL for the phone app WS server
-const OUTPUT_WS_PORT = process.env.REALTIME_WS_PORT || 8081; // Port for the output WS server
 const PROCESSING_INTERVAL_MS = 5000; // How often to potentially send 'esta-info' or 'stop' messages
 
 // --- Constants for Direction Detection ---
@@ -18,9 +16,8 @@ const STOP_DEPARTURE_ADD_SECONDS = 30; // Seconds to add to arrival time for dep
 // Key: busId, Value: Object containing history, rt_id, etc.
 const activeBusStates = new Map();
 
-// --- References to Passenger Connections (to be injected) ---
-let passengerConnectionsRef = null;
-let broadcastFunction = null; // Will hold the function to broadcast messages
+// --- References to Passenger Connections and Broadcast Function (to be injected) ---
+let broadcastToRouteClientsFunction = null;
 
 // --- Helper Functions ---
 
@@ -346,7 +343,26 @@ async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) 
   }
 }
 
-
+/**
+ * Fetches the main RouteLine ID (e.g., 101) associated with a specific SubLine ID (rt_id, e.g., 1011).
+ * @param {number} rtId - The SubLine ID (rt_id).
+ * @returns {Promise<number|null>} The main RouteLine ID or null on error/not found.
+ */
+async function getMainRouteIdFromRtId(rtId) {
+    try {
+        const query = 'SELECT lineid FROM "SubLine" WHERE id = $1'; // Adjust table/column names if necessary
+        const result = await pool.query(query, [rtId]);
+        if (result.rows.length > 0) {
+            return result.rows[0].lineid; // Return the main route ID
+        } else {
+            console.error(`[DB Query] Could not find main route ID for subline rt_id: ${rtId}`);
+            return null;
+        }
+    } catch (error) {
+        console.error(`[DB Error] Error fetching main route ID for rt_id ${rtId}:`, error);
+        return null;
+    }
+}
 // --- Processing Logic ---
 
 /**
@@ -419,25 +435,31 @@ async function processLocationData(rawData) {
   // This logic would go here if implemented (requires tracking previous state and comparing rt_ids)
   if (previousRtId && previousRtId !== currentRtId) {
      console.log(`[${busId}] Route change detected: ${previousRtId} -> ${currentRtId}. Sending 'close' for old route.`);
-     const closeMessage = {
-         type: "close",
-         rt_id: previousRtId,
-         // Format timestamp as "YYYYMMDD HHmmss"
-         upd: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
-         date: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
-         del: 0, // Delay placeholder
-         pass: "0", // Passengers placeholder
-         lat: busState.history[busState.history.length - 2]?.lat || currentLat, // Previous known lat if available
-         lng: busState.history[busState.history.length - 2]?.lng || currentLng, // Previous known lng if available
-         stop_id: 0, // Placeholder
-         stop_code: "-", // Placeholder
-         stop_nam: "-" // Placeholder
-     };
-     // Broadcast the 'close' message using the injected function
-     if (broadcastFunction) {
-         broadcastFunction(closeMessage);
+     // Determine the main route ID for the *old* rt_id
+     const previousRouteId = await getMainRouteIdFromRtId(previousRtId);
+     if (previousRouteId) {
+         const closeMessage = {
+             type: "close",
+             rt_id: previousRtId,
+             // Format timestamp as "YYYYMMDD HHmmss"
+             upd: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
+             date: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
+             del: 0, // Delay placeholder
+             pass: "0", // Passengers placeholder
+             lat: busState.history[busState.history.length - 2]?.lat || currentLat, // Previous known lat if available
+             lng: busState.history[busState.history.length - 2]?.lng || currentLng, // Previous known lng if available
+             stop_id: 0, // Placeholder
+             stop_code: "-", // Placeholder
+             stop_nam: "-" // Placeholder
+         };
+         // Broadcast the 'close' message using the function that targets the route
+         if (broadcastToRouteClientsFunction) {
+             broadcastToRouteClientsFunction(previousRtId, closeMessage); // Send to the route associated with the *old* rt_id
+         } else {
+             console.warn(`[${busId}] Broadcast function not available, cannot send 'close' message for old rt_id ${previousRtId}.`);
+         }
      } else {
-         console.warn(`[${busId}] Broadcast function not available, cannot send 'close' message.`);
+         console.warn(`[${busId}] Could not determine main routeId for old rt_id ${previousRtId}, skipping 'close' message.`);
      }
   }
   // --- Format and Send 'position' message (if rt_id is known) ---
@@ -456,12 +478,12 @@ async function processLocationData(rawData) {
       vel: velocityKmh // Use converted velocity
     };
 
-   // Broadcast the message using the injected function
-    if (broadcastFunction) {
-        broadcastFunction(positionMessage);
-        console.log(`[${busId}] Sent 'position' message for rt_id ${currentRtId} at (${currentLat}, ${currentLng}), vel ${velocityKmh.toFixed(2)} km/h`);
+   // Broadcast the message to clients subscribed to the *main route* associated with this rt_id
+    if (broadcastToRouteClientsFunction) {
+        broadcastToRouteClientsFunction(currentRtId, positionMessage); // Pass the rt_id, function figures out the main route
+        console.log(`[${busId}] Sent 'position' message for rt_id ${currentRtId} (on main route) to route-specific clients.`);
     } else {
-        console.warn(`[${busId}] Broadcast function not available, cannot send 'position' message.`);
+        console.warn(`[${busId}] Broadcast function not available, cannot send 'position' message for rt_id ${currentRtId}.`);
     }
   } else {
     console.log(`[${busId}] rt_id is unknown (after checking route ${routeId}), skipping 'position' message.`);
@@ -605,12 +627,12 @@ async function processLocationData(rawData) {
                 }
             };
 
-            // Broadcast the 'esta-info' message using the injected function
-            if (broadcastFunction) {
-                broadcastFunction(estaInfoMessage);
-                console.log(`[${busId}] Sent 'esta-info' message for rt_id ${currentRtId}, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
+            // Broadcast the 'esta-info' message using the function that targets the route
+            if (broadcastToRouteClientsFunction) {
+                broadcastToRouteClientsFunction(currentRtId, estaInfoMessage); // Send to the route associated with this rt_id
+                console.log(`[${busId}] Sent 'esta-info' message for rt_id ${currentRtId} (on main route) to route-specific clients, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
             } else {
-                console.warn(`[${busId}] Broadcast function not available, cannot send 'esta-info' message.`);
+                console.warn(`[${busId}] Broadcast function not available, cannot send 'esta-info' message for rt_id ${currentRtId}.`);
             }
         } else {
             console.log(`[${busId}] No upcoming stops found on rt_id ${currentRtId} after the closest stop in sequence.`);
@@ -634,11 +656,11 @@ async function processLocationData(rawData) {
                     cap_standing: 20,
                 }
             };
-            if (broadcastFunction) {
-                broadcastFunction(emptyEstaInfoMessage);
-                console.log(`[${busId}] Sent 'esta-info' message with empty stops list for rt_id ${currentRtId} (likely near end of route).`);
+            if (broadcastToRouteClientsFunction) {
+                broadcastToRouteClientsFunction(currentRtId, emptyEstaInfoMessage); // Send to the route associated with this rt_id
+                console.log(`[${busId}] Sent 'esta-info' message with empty stops list for rt_id ${currentRtId} (likely near end of route on main route) to route-specific clients.`);
             } else {
-                console.warn(`[${busId}] Broadcast function not available, cannot send empty 'esta-info' message.`);
+                console.warn(`[${busId}] Broadcast function not available, cannot send empty 'esta-info' message for rt_id ${currentRtId}.`);
             }
         }
     } else {
@@ -662,15 +684,15 @@ async function processLocationData(rawData) {
 // --- Output Broadcasting Functions (to be injected) ---
 
 /**
- * Injects the passenger connections set and the broadcast function from the driverLocationWs module.
- * @param {Set} passengerConnections - The Set containing active passenger WebSocket connections.
- * @param {Function} broadcastFunc - The function to broadcast messages to passenger connections.
+ * Injects the function used to broadcast messages to clients subscribed to a specific route.
+ * @param {Function} broadcastFunc - The function to broadcast messages to route-specific clients.
  */
-function injectPassengerConnections(passengerConnections, broadcastFunc) {
-    console.log('[RealtimeProcessor] Injecting passenger connections and broadcast function.');
-    passengerConnectionsRef = passengerConnections;
-    broadcastFunction = broadcastFunc;
+function injectBroadcastFunction(broadcastFunc) {
+    console.log('[RealtimeProcessor] Injecting broadcast function.');
+    broadcastToRouteClientsFunction = broadcastFunc;
 }
+
+// --- Initialization and Teardown ---
 
 // --- Initialization and Teardown ---
 
@@ -686,5 +708,5 @@ function stop() {
   console.log('[RealtimeProcessor] Real-time processor stopped.');
 }
 
-// Export functions if needed elsewhere
-module.exports = { processLocationData, start, stop, injectPassengerConnections };
+// Export the processing function and the injection/start/stop functions
+module.exports = { processLocationData, start, stop, injectBroadcastFunction };
