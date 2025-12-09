@@ -256,9 +256,21 @@ async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) 
       const stopA = stopsOnSubline[i];
       const stopB = stopsOnSubline[i + 1];
 
-      // Calculate the bearing from Stop A to Stop B on this specific subline
-      const routeSegmentBearing = calculateBearing(stopA.lat, stopA.lon, stopB.lat, stopB.lon);
+      // --- CRITICAL FIX: Convert string coordinates to numbers ---
+      // The database might return lat/lon as strings. parseFloat converts them to numbers.
+      const stopALat = parseFloat(stopA.lat);
+      const stopALon = parseFloat(stopA.lon);
+      const stopBLat = parseFloat(stopB.lat);
+      const stopBLon = parseFloat(stopB.lon);
 
+      // Validate the conversion
+      if (isNaN(stopALat) || isNaN(stopALon) || isNaN(stopBLat) || isNaN(stopBLon)) {
+        console.error(`[${busId}] Invalid coordinate values found for stops ${stopA.id} (${stopA.nam}) or ${stopB.id} (${stopB.nam}) on subline ${sublineId}. Skipping segment. Data:`, stopA, stopB);
+        continue; // Skip this segment if coordinates are invalid
+      }
+
+      // Calculate the bearing from Stop A to Stop B on this specific subline
+      const routeSegmentBearing = calculateBearing(stopALat, stopALon, stopBLat, stopBLon);
       if (routeSegmentBearing === null) {
         console.log(`[${busId}] Could not calculate bearing for route segment ${stopA.id} (${stopA.nam}) -> ${stopB.id} (${stopB.nam}) on subline ${sublineId}. Skipping segment.`);
         continue; // Skip this segment if bearing calculation failed
