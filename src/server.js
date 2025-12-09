@@ -9,7 +9,7 @@ const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
-const { broadcastToRouteClients, initializeBroadcastFunction } = require('./services/realtimeProcessor'); // Import the processor
+const { processLocationData, broadcastToRouteClients, initializeBroadcastFunction } = require('./services/realtimeProcessor'); // Import the updated processor
 
 const app = express();
 const PORT = process.env.PORT || 3000;
