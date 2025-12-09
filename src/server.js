@@ -40,8 +40,8 @@ app.get('/', (req, res) => {
 
 const server = http.createServer(app);
 
-// Create the main WebSocket server instance (for driver app)
-const driverWss = new WebSocket.Server({ noServer: true });
+// Create the main WebSocket server instance
+const wss = new WebSocket.Server({ server });
 
 // --- NEW: Manage Passenger Connections by Route ---
 // Key: routeId (e.g., "101"), Value: Set of WebSocket clients interested in that route
@@ -53,8 +53,8 @@ server.on('upgrade', (request, socket, head) => {
 
   // --- Handle Driver WebSocket Upgrade ---
   if (url === '/api/driver-location-ws') {
-    driverWss.handleUpgrade(request, socket, head, (ws) => {
-      driverWss.emit('connection', ws, request);
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
     });
     return; // Exit after handling driver upgrade
   }
@@ -68,16 +68,12 @@ server.on('upgrade', (request, socket, head) => {
     const routeId = match[1]; // Extract the routeId from the URL (e.g., "101")
     console.log(`Passenger WebSocket upgrade request for routeId: ${routeId}`);
 
-    // Prepare the WebSocket server instance for this specific route
-    // We'll create a temporary server just for this upgrade, then add the client to our map
-    const tempWss = new WebSocket.Server({ noServer: true });
-
-    tempWss.handleUpgrade(request, socket, head, (ws) => {
-      tempWss.emit('connection', ws, request, routeId); // Pass routeId to the connection handler
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request, routeId); // Pass routeId to the connection handler
     });
 
     // Handle the connection for this specific route
-    tempWss.on('connection', (ws, request, routeId) => {
+    wss.on('connection', (ws, request, routeId) => {
       console.log(`Passenger connected to /api/passenger-realtime-ws/${routeId}`);
 
       // Add the client to the specific route's set
