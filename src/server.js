@@ -66,13 +66,13 @@ server.listen(PORT, () => {
   // Note: You may need to adjust how you pass the WebSocket server to the processor
   // based on your existing realtimeProcessor implementation
   console.log('Initializing real-time processor...');
-  // realtimeProcessor.start(wss); // Uncomment and adjust if needed
+  realtimeProcessor.start(); // Call the start function here
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
-  // realtimeProcessor.stop(); // Stop the processors if you have this
+  realtimeProcessor.stop(); // Stop the processors if you have this
   server.close(() => {
     console.log('Process terminated.');
     process.exit(0);
@@ -81,7 +81,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
-  // realtimeProcessor.stop(); // Stop the processors if you have this
+  realtimeProcessor.stop(); // Stop the processors if you have this
   server.close(() => {
     console.log('Process terminated.');
     process.exit(0);

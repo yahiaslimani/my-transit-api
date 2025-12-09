@@ -1,5 +1,4 @@
 // src/services/realtimeProcessor.js
-const WebSocket = require('ws');
 const { pool } = require('../config/database'); // Import your DB connection pool
 
 // --- Configuration ---
@@ -19,10 +18,9 @@ const STOP_DEPARTURE_ADD_SECONDS = 30; // Seconds to add to arrival time for dep
 // Key: busId, Value: Object containing history, rt_id, etc.
 const activeBusStates = new Map();
 
-// --- WebSocket Clients/Servers ---
-let phoneWsClient = null;
-let outputWsServer = null;
-let outputWsClients = new Set(); // Store connected clients for broadcasting
+// --- References to Passenger Connections (to be injected) ---
+let passengerConnectionsRef = null;
+let broadcastFunction = null; // Will hold the function to broadcast messages
 
 // --- Helper Functions ---
 
@@ -435,7 +433,12 @@ async function processLocationData(rawData) {
          stop_code: "-", // Placeholder
          stop_nam: "-" // Placeholder
      };
-     broadcastToClients(closeMessage);
+     // Broadcast the 'close' message using the injected function
+     if (broadcastFunction) {
+         broadcastFunction(closeMessage);
+     } else {
+         console.warn(`[${busId}] Broadcast function not available, cannot send 'close' message.`);
+     }
   }
   // --- Format and Send 'position' message (if rt_id is known) ---
   if (currentRtId !== null) {
@@ -453,9 +456,13 @@ async function processLocationData(rawData) {
       vel: velocityKmh // Use converted velocity
     };
 
-    // Broadcast the message to connected clients (e.g., Flutter app)
-    broadcastToClients(positionMessage);
-    console.log(`[${busId}] Sent 'position' message for rt_id ${currentRtId} at (${currentLat}, ${currentLng}), vel ${velocityKmh.toFixed(2)} km/h`);
+   // Broadcast the message using the injected function
+    if (broadcastFunction) {
+        broadcastFunction(positionMessage);
+        console.log(`[${busId}] Sent 'position' message for rt_id ${currentRtId} at (${currentLat}, ${currentLng}), vel ${velocityKmh.toFixed(2)} km/h`);
+    } else {
+        console.warn(`[${busId}] Broadcast function not available, cannot send 'position' message.`);
+    }
   } else {
     console.log(`[${busId}] rt_id is unknown (after checking route ${routeId}), skipping 'position' message.`);
     // Potentially send an error message or a status update to the client if rt_id cannot be determined
@@ -598,9 +605,13 @@ async function processLocationData(rawData) {
                 }
             };
 
-            // Broadcast the 'esta-info' message
-            broadcastToClients(estaInfoMessage);
-            console.log(`[${busId}] Sent 'esta-info' message for rt_id ${currentRtId}, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
+            // Broadcast the 'esta-info' message using the injected function
+            if (broadcastFunction) {
+                broadcastFunction(estaInfoMessage);
+                console.log(`[${busId}] Sent 'esta-info' message for rt_id ${currentRtId}, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
+            } else {
+                console.warn(`[${busId}] Broadcast function not available, cannot send 'esta-info' message.`);
+            }
         } else {
             console.log(`[${busId}] No upcoming stops found on rt_id ${currentRtId} after the closest stop in sequence.`);
             // Potentially send an 'esta-info' with an empty stops array or a specific message if the bus is at/near the last stop
@@ -623,8 +634,12 @@ async function processLocationData(rawData) {
                     cap_standing: 20,
                 }
             };
-            broadcastToClients(emptyEstaInfoMessage);
-            console.log(`[${busId}] Sent 'esta-info' message with empty stops list for rt_id ${currentRtId} (likely near end of route).`);
+            if (broadcastFunction) {
+                broadcastFunction(emptyEstaInfoMessage);
+                console.log(`[${busId}] Sent 'esta-info' message with empty stops list for rt_id ${currentRtId} (likely near end of route).`);
+            } else {
+                console.warn(`[${busId}] Broadcast function not available, cannot send empty 'esta-info' message.`);
+            }
         }
     } else {
         console.log(`[${busId}] Stops for rt_id ${currentRtId} are not available or could not be fetched. Cannot generate 'esta-info'.`);
@@ -644,58 +659,32 @@ async function processLocationData(rawData) {
 }
 
 
-// --- Output WebSocket Server (for broadcasting to passenger apps) ---
+// --- Output Broadcasting Functions (to be injected) ---
 
 /**
- * Starts the output WebSocket server for clients (like the Passenger Flutter app).
- * @param {*} outputServerInstance - The HTTP server instance to attach the WS server to.
+ * Injects the passenger connections set and the broadcast function from the driverLocationWs module.
+ * @param {Set} passengerConnections - The Set containing active passenger WebSocket connections.
+ * @param {Function} broadcastFunc - The function to broadcast messages to passenger connections.
  */
-function startOutputWSServer(outputServerInstance) {
-  if (!outputServerInstance) {
-    console.error("Cannot start output WebSocket server: No HTTP server instance provided.");
-    return;
-  }
-
-  outputWsServer = new WebSocket.Server({ server: outputServerInstance, path: '/api/passenger-realtime-ws' }); // Define a path
-
-  outputWsServer.on('connection', (ws, req) => {
-    console.log('Client connected to output WebSocket server at /api/passenger-realtime-ws.');
-    outputWsClients.add(ws);
-
-    ws.on('close', () => {
-      console.log('Client disconnected from output WebSocket server.');
-      outputWsClients.delete(ws);
-    });
-
-    ws.on('error', (error) => {
-      console.error('Error in output WebSocket client connection:', error);
-      outputWsClients.delete(ws); // Remove client on error
-    });
-
-    // Optionally, send a welcome message or initial data if applicable
-    // ws.send(JSON.stringify({ type: 'connected', message: 'Connected to real-time data feed' }));
-  });
-
-  console.log(`Output WebSocket server listening on path /api/passenger-realtime-ws`);
+function injectPassengerConnections(passengerConnections, broadcastFunc) {
+    console.log('[RealtimeProcessor] Injecting passenger connections and broadcast function.');
+    passengerConnectionsRef = passengerConnections;
+    broadcastFunction = broadcastFunc;
 }
 
-/**
- * Broadcasts a message to all connected clients on the output WebSocket server.
- * @param {object} message - The message object to send (e.g., {type: 'position', rt_id: 123, ...}).
- */
-function broadcastToClients(message) {
-  if (outputWsServer && outputWsClients.size > 0) {
-    const messageStr = JSON.stringify(message);
-    outputWsClients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(messageStr);
-      }
-    });
-    console.log('Broadcasted message:', messageStr); // Log for debugging
-  } else {
-    console.log('No clients connected to output WebSocket, message not sent:', message); // Log only if needed frequently
-  }
+// --- Initialization and Teardown ---
+
+function start() {
+  console.log('[RealtimeProcessor] Starting real-time processor components...');
+  // Initialization logic if needed
+  console.log('[RealtimeProcessor] Real-time processor components initialized.');
+}
+
+function stop() {
+  console.log('[RealtimeProcessor] Stopping real-time processor...');
+  // Teardown logic if needed (e.g., clear intervals, close connections if held here)
+  console.log('[RealtimeProcessor] Real-time processor stopped.');
 }
 
 // Export functions if needed elsewhere
-module.exports = { processLocationData, startOutputWSServer, broadcastToClients, activeBusStates };
+module.exports = { processLocationData, start, stop, injectPassengerConnections };
