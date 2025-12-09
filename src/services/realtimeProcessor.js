@@ -61,7 +61,31 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
   return R * c; // Distance in meters
 }
+/**
+ * Calculates an estimated arrival time based on distance and current velocity.
+ * @param {number} distanceMeters - Distance to the destination in meters.
+ * @param {number} velocityMps - Current velocity in meters per second.
+ * @returns {string|null} Estimated arrival time in 'YYYYMMDD HHmmss' format, or null if velocity is 0.
+ */
+function calculateEstimatedTime(distanceMeters, velocityMps) {
+  if (velocityMps <= 0) {
+    console.log('Cannot calculate estimated time: velocity is 0 or negative.');
+    return null; // Cannot estimate if not moving or moving backwards
+  }
 
+  const timeInSeconds = distanceMeters / velocityMps; // Time in seconds
+  const estimatedDate = new Date(Date.now() + timeInSeconds * 1000); // Add time to current time
+
+  // Format the date as 'YYYYMMDD HHmmss'
+  const year = estimatedDate.getUTCFullYear();
+  const month = String(estimatedDate.getUTCMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+  const day = String(estimatedDate.getUTCDate()).padStart(2, '0');
+  const hours = String(estimatedDate.getUTCHours()).padStart(2, '0');
+  const minutes = String(estimatedDate.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(estimatedDate.getUTCSeconds()).padStart(2, '0');
+
+  return `${year}${month}${day} ${hours}${minutes}${seconds}`;
+}
 /**
  * Calculates the initial bearing (forward azimuth) from point 1 to point 2.
  * @param {number} lat1
