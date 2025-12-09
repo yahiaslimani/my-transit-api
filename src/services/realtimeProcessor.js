@@ -164,7 +164,6 @@ async function getOrderedStopsForRouteSublines(routeId) {
         s.lon AS stop_lon,
         s.nam AS stop_nam,
         s.ref AS stop_ref,
-        s."dateNotActive" AS stop_date_not_active,
         sls.stoporder AS stop_order
       FROM "SubLine" sl
       JOIN "SubLineStop" sls ON sl.id = sls.sublineid
