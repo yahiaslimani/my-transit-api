@@ -35,22 +35,28 @@ let outputWsClients = new Set(); // Store connected clients for broadcasting
  * @returns {number} Distance in meters
  */
 function haversineDistance(lat1, lon1, lat2, lon2) {
-  // Validate inputs to prevent NaN
-  if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || typeof lat2 !== 'number' || typeof lon2 !== 'number' ||
-    isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
-    console.error('Invalid coordinates for haversineDistance:', { lat1, lon1, lat2, lon2 });
+  // Validate inputs to prevent NaN - CONVERT TO NUMBER FIRST if they might be strings
+  const numLat1 = typeof lat1 === 'string' ? parseFloat(lat1) : lat1;
+  const numLon1 = typeof lon1 === 'string' ? parseFloat(lon1) : lon1;
+  const numLat2 = typeof lat2 === 'string' ? parseFloat(lat2) : lat2;
+  const numLon2 = typeof lon2 === 'string' ? parseFloat(lon2) : lon2;
+
+  if (typeof numLat1 !== 'number' || typeof numLon1 !== 'number' || typeof numLat2 !== 'number' || typeof numLon2 !== 'number' ||
+      isNaN(numLat1) || isNaN(numLon1) || isNaN(numLat2) || isNaN(numLon2)) {
+    console.error('Invalid coordinates for haversineDistance (after conversion):', { lat1, lon1, lat2, lon2 });
+    console.error('Converted values:', { numLat1, numLon1, numLat2, numLon2 });
     return NaN; // Or throw an error if preferred
   }
 
   const R = 6371e3; // Earth's radius in meters
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180;
-  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const φ1 = numLat1 * Math.PI / 180;
+  const φ2 = numLat2 * Math.PI / 180;
+  const Δφ = (numLat2 - numLat1) * Math.PI / 180;
+  const Δλ = (numLon2 - numLon1) * Math.PI / 180;
 
   const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) *
-    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return R * c; // Distance in meters
@@ -65,20 +71,27 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
  * @returns {number|null} Bearing in degrees (0-360) or null if invalid coordinates
  */
 function calculateBearing(lat1, lon1, lat2, lon2) {
+  // Convert to numbers if strings
+  const numLat1 = typeof lat1 === 'string' ? parseFloat(lat1) : lat1;
+  const numLon1 = typeof lon1 === 'string' ? parseFloat(lon1) : lon1;
+  const numLat2 = typeof lat2 === 'string' ? parseFloat(lat2) : lat2;
+  const numLon2 = typeof lon2 === 'string' ? parseFloat(lon2) : lon2;
+
   // Validate inputs
-  if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || typeof lat2 !== 'number' || typeof lon2 !== 'number' ||
-    isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
-    console.error('Invalid coordinates for calculateBearing:', { lat1, lon1, lat2, lon2 });
+  if (typeof numLat1 !== 'number' || typeof numLon1 !== 'number' || typeof numLat2 !== 'number' || typeof numLon2 !== 'number' ||
+      isNaN(numLat1) || isNaN(numLon1) || isNaN(numLat2) || isNaN(numLon2)) {
+    console.error('Invalid coordinates for calculateBearing (after conversion):', { lat1, lon1, lat2, lon2 });
+    console.error('Converted values:', { numLat1, numLon1, numLat2, numLon2 });
     return null;
   }
 
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const φ1 = numLat1 * Math.PI / 180;
+  const φ2 = numLat2 * Math.PI / 180;
+  const Δλ = (numLon2 - numLon1) * Math.PI / 180;
 
   const y = Math.sin(Δλ) * Math.cos(φ2);
   const x = Math.cos(φ1) * Math.sin(φ2) -
-    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+          Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
   const θ = Math.atan2(y, x);
   let bearing = (θ * 180 / Math.PI + 360) % 360;
   return bearing;
