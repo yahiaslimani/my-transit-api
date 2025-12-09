@@ -9,7 +9,7 @@ const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
-const { initializeBroadcastFunction } = require('./services/realtimeProcessor'); // Import the updated processor
+const { injectBroadcastFunction } = require('./services/realtimeProcessor'); // Import the updated processor
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -175,14 +175,10 @@ async function getMainRouteIdFromRtId(rtId) {
     }
 }
 
-// --- Initialize the realtimeProcessor with the new broadcast function ---
-// This should happen after the server.listen() call or when the server instance is ready.
-// We need to pass the broadcast function to the processor.
-initializeBroadcastFunction(broadcastToRouteClients); // Pass the new broadcast function
 
 // --- Call the injection function ---
 // This should happen *after* broadcastToRouteClients is defined
-require('./services/realtimeProcessor').injectBroadcastFunction(broadcastToRouteClients);
+injectBroadcastFunction(broadcastToRouteClients);
 
 server.listen(PORT, () => {
   console.log(`Main server is running on port ${PORT}`);
