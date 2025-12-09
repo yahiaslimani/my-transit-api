@@ -709,4 +709,4 @@ function stop() {
 }
 
 // Export the processing function and the injection/start/stop functions
-module.exports = { processLocationData, start, stop, injectBroadcastFunction };
+module.exports = { processLocationData, start, stop, injectBroadcastFunction, activeBusStates };

@@ -9,7 +9,7 @@ const errorHandler = require('./middleware/errorHandler');
 const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
-const { injectBroadcastFunction, start: startRealtimeProcessor, stop: stopRealtimeProcessor } = require('./services/realtimeProcessor'); // Import processor functions
+const { injectBroadcastFunction, start: startRealtimeProcessor, stop: stopRealtimeProcessor, processLocationData } = require('./services/realtimeProcessor'); // Import processor functions
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,7 +43,7 @@ const server = http.createServer(app);
 
 // --- SINGLE WebSocket Server Instance ---
 // Create one WebSocket server instance attached to the HTTP server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ noServer: true }); // Create without attaching to 'server' yet
 
 // --- NEW: Manage Passenger Connections by Route ---
 // Key: routeId (e.g., "101"), Value: Set of WebSocket clients interested in that route
@@ -101,35 +101,89 @@ async function getMainRouteIdFromRtId(rtId) {
     }
 }
 
+server.on('upgrade', (request, socket, head) => {
+  const url = request.url;
 
-// --- Handle WebSocket Connections ---
-wss.on('connection', (ws, req) => {
-  const url = req.url;
-
-  // --- Handle Driver Connection ---
+  // --- Handle Driver WebSocket Upgrade ---
   if (url === '/api/driver-location-ws') {
-    console.log('Driver app connected to /api/driver-location-ws');
-    // You can handle driver-specific logic here if needed,
-    // but the main processing happens in the realtimeProcessor module
-    // when it receives data from the phone app.
-    ws.on('close', () => {
-      console.log('Driver app disconnected from /api/driver-location-ws');
+    console.log('Driver app WebSocket upgrade request received for /api/driver-location-ws');
+    // Use the single WSS instance to handle the upgrade
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request, 'driver'); // Emit connection event with a type indicator
     });
-    ws.on('error', (error) => {
-      console.error('Error in driver app WebSocket connection:', error);
-    });
-    // Optionally, send a welcome message to the driver app
-    ws.send(JSON.stringify({ type: 'connected', message: 'Connected to driver location service' }));
-    return; // Exit after handling driver connection
+    return; // Exit after handling driver upgrade
   }
 
-  // --- Handle Passenger Connection ---
+  // --- Handle Passenger WebSocket Upgrade ---
   // Match the path: /api/passenger-realtime-ws/{routeId}
   const passengerWsRegex = /^\/api\/passenger-realtime-ws\/(\d+)$/;
   const match = url.match(passengerWsRegex);
 
   if (match) {
     const routeId = match[1]; // Extract the routeId from the URL (e.g., "101")
+    console.log(`Passenger WebSocket upgrade request received for routeId: ${routeId}`);
+
+    // Use the single WSS instance to handle the upgrade
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request, 'passenger', routeId); // Emit connection event with type and routeId
+    });
+    return; // Exit after handling passenger upgrade
+  }
+
+  // If the URL doesn't match any known WebSocket path, destroy the socket
+  console.warn(`Unknown WebSocket path requested: ${url}, closing connection.`);
+  socket.destroy();
+});
+
+// --- Handle WebSocket Connections (Driver Input & Passenger Output) ---
+wss.on('connection', (ws, request, connectionType, routeId) => {
+  if (connectionType === 'driver') {
+    console.log('Driver app connected to /api/driver-location-ws');
+
+    // Handle messages from the driver's phone app
+    ws.on('message', (data) => {
+      try {
+        const messageStr = data.toString();
+        console.log('Raw message received from driver app:', messageStr);
+
+        let parsedData;
+        try {
+          parsedData = JSON.parse(messageStr);
+        } catch (e) {
+          console.error('Error parsing message from driver app as JSON:', e);
+          console.log('Problematic message:', messageStr);
+          ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON received' }));
+          return; // Exit if parsing fails
+        }
+
+        console.log('Parsed data from driver app:', parsedData);
+
+        if (parsedData && typeof parsedData === 'object' && parsedData.busId) {
+          // Process the parsed data using the function from realtimeProcessor
+          processLocationData(parsedData); // Pass the raw data object
+        } else {
+          console.warn('Received message from driver app is not a valid object with busId:', parsedData);
+          ws.send(JSON.stringify({ type: 'error', message: 'Valid object with busId required' }));
+        }
+      } catch (error) {
+        console.error('Error processing message from driver app:', error);
+        // Optionally, send an error message back
+         ws.send(JSON.stringify({ type: 'error', message: 'Server error processing message' }));
+      }
+    });
+
+    ws.on('close', () => {
+      console.log('Driver app disconnected from /api/driver-location-ws');
+    });
+
+    ws.on('error', (error) => {
+      console.error('Error in driver app WebSocket connection:', error);
+    });
+
+    // Optionally, send a welcome message to the driver app
+    ws.send(JSON.stringify({ type: 'connected', message: 'Connected to driver location service' }));
+
+  } else if (connectionType === 'passenger' && routeId) {
     console.log(`Passenger connected to /api/passenger-realtime-ws/${routeId}`);
 
     // Add the client to the specific route's set
@@ -168,12 +222,11 @@ wss.on('connection', (ws, req) => {
       }
     });
 
-    return; // Exit after handling passenger connection
+  } else {
+    // This shouldn't happen if the upgrade logic is correct, but just in case.
+    console.warn('WebSocket connection received with unknown type or missing routeId, closing.');
+    ws.close(1008, 'Invalid connection type or missing routeId'); // Close with 'Policy Violation' code
   }
-
-  // If the URL doesn't match any known WebSocket path, close the connection immediately
-  console.warn(`Unknown WebSocket path requested: ${url}, closing connection.`);
-  ws.close(1008, 'Invalid endpoint'); // Close with 'Policy Violation' code
 });
 
 wss.on('error', (error) => {
@@ -184,7 +237,6 @@ wss.on('error', (error) => {
 // This must happen *after* the broadcastToRouteClients function is defined
 injectBroadcastFunction(broadcastToRouteClients);
 
-// Start the main HTTP server
 server.listen(PORT, () => {
   console.log(`Main server is running on port ${PORT}`);
   console.log(`Driver endpoint: /api/driver-location-ws`);
