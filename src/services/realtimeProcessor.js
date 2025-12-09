@@ -11,6 +11,9 @@ const PROCESSING_INTERVAL_MS = 5000; // How often to potentially send 'esta-info
 const MIN_SIGNALS_FOR_DIRECTION = 3; // Minimum number of recent signals needed
 const MIN_MOVEMENT_THRESHOLD_METERS = 1.0; // Minimum distance between points to consider for bearing calc
 const DIRECTION_MATCH_THRESHOLD_DEGREES = 45.0; // Max angle diff to consider a match
+const STOP_DETECTION_RADIUS_METERS = 50; // Radius to consider bus at a stop
+const STOP_DETECTION_MIN_TIME_SECONDS = 30; // Minimum time stationary to confirm a stop
+const STOP_DEPARTURE_ADD_SECONDS = 30; // Seconds to add to arrival time for departure time
 
 // --- In-Memory Storage for Bus States ---
 // Key: busId, Value: Object containing history, rt_id, etc.
@@ -330,6 +333,7 @@ async function processLocationData(rawData) {
     rtId: null, // Store the determined rt_id (subline ID)
     lastProcessedRtId: null, // Store the previous rt_id for change detection
     lastProcessedTimestamp: null,
+    stopsForCurrentRtId: null, // Cache stops for the current rt_id
     // Add other state variables if needed
   };
 
@@ -378,7 +382,24 @@ async function processLocationData(rawData) {
 
   // --- Handle Route Changes (Send 'close' for old route if applicable) ---
   // This logic would go here if implemented (requires tracking previous state and comparing rt_ids)
-
+  if (previousRtId && previousRtId !== currentRtId) {
+     console.log(`[${busId}] Route change detected: ${previousRtId} -> ${currentRtId}. Sending 'close' for old route.`);
+     const closeMessage = {
+         type: "close",
+         rt_id: previousRtId,
+         // Format timestamp as "YYYYMMDD HHmmss"
+         upd: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
+         date: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
+         del: 0, // Delay placeholder
+         pass: "0", // Passengers placeholder
+         lat: busState.history[busState.history.length - 2]?.lat || currentLat, // Previous known lat if available
+         lng: busState.history[busState.history.length - 2]?.lng || currentLng, // Previous known lng if available
+         stop_id: 0, // Placeholder
+         stop_code: "-", // Placeholder
+         stop_nam: "-" // Placeholder
+     };
+     broadcastToClients(closeMessage);
+  }
   // --- Format and Send 'position' message (if rt_id is known) ---
   if (currentRtId !== null) {
     // Convert velocity from m/s (Geolocator) to km/h if expected by frontend
@@ -403,7 +424,177 @@ async function processLocationData(rawData) {
     // Potentially send an error message or a status update to the client if rt_id cannot be determined
     // broadcastToClients({ type: 'error', busId, message: 'Unable to determine route/direction' });
   }
+  // --- Determine Upcoming Stops and Send 'esta-info' (if rt_id is known and subline data is available) ---
+  if (currentRtId !== null) {
+    // Check if stops for this subline are already known and cached in busState or globally
+    if (!busState.stopsForCurrentRtId || busState.stopsForCurrentRtId.rtId !== currentRtId) {
+         console.log(`[${busId}] Fetching stops for newly matched/confirmed rt_id: ${currentRtId}`);
+         // We need the routeId to fetch stops. We could pass routeId from the raw data if needed,
+         // or store it in the busState when rt_id is first matched.
+         // For now, let's assume we can get the routeId somehow when needed.
+         // A better approach might be to store the routeId alongside rt_id in the busState when matching occurs.
+         // This requires fetching the routeId from the SubLine table using the rt_id.
+         // Let's fetch the stops directly using the currentRtId (subline.id)
+         const stopsForSublineQuery = `
+            SELECT s.id, s.cod, s.lat, s.lon, s.nam, s.ref, sls.stoporder
+            FROM "Stop" s
+            JOIN "SubLineStop" sls ON s.id = sls.stopid
+            JOIN "SubLine" sl ON sls.sublineid = sl.id
+            WHERE sl.id = $1 -- Filter by the specific SubLine ID (rt_id)
+            ORDER BY sls.stoporder ASC; -- Order by the sequence on this specific subline
+         `;
+         try {
+             const stopsResult = await pool.query(stopsForSublineQuery, [currentRtId]);
+             if (stopsResult.rows.length > 0) {
+                 busState.stopsForCurrentRtId = { rtId: currentRtId, stops: stopsResult.rows };
+                 console.log(`[${busId}] Cached ${busState.stopsForCurrentRtId.stops.length} stops for rt_id ${currentRtId}`);
+             } else {
+                 console.warn(`[${busId}] Could not fetch stops for rt_id ${currentRtId}. Cannot generate 'esta-info'.`);
+                 busState.stopsForCurrentRtId = { rtId: currentRtId, stops: [] }; // Mark as fetched but empty/failed
+             }
+         } catch (error) {
+             console.error(`[${busId}] Error fetching stops for rt_id ${currentRtId}:`, error);
+             busState.stopsForCurrentRtId = { rtId: currentRtId, stops: [] }; // Mark as failed
+         }
+    }
 
+    if (busState.stopsForCurrentRtId && busState.stopsForCurrentRtId.rtId === currentRtId && busState.stopsForCurrentRtId.stops.length > 0) {
+        const stopsOnSubline = busState.stopsForCurrentRtId.stops;
+        const currentTimeFormatted = currentTimestamp.replace('T', ' ').substring(0, 19).replace(/\..*$/, ''); // Format for 'upd'/'date'
+
+        // Find the index of the *next* stop in the sequence based on current position
+        // This is a simplified approach: find the closest upcoming stop *in the sequence*.
+        let nextStopIndex = -1;
+        let minDistanceToNextStop = Infinity;
+
+        // Start searching from the stop *after* the one we last knew the bus was closest to (or from the beginning if unknown)
+        // We need to find the current position relative to the stop sequence.
+        // A simple heuristic: find the stop in the sequence closest to the current bus position.
+        // Then, the *next* stops in the *sequence* (with higher stoporder) are the upcoming ones.
+        let closestStopIndexInSequence = -1;
+        let minDistanceToAnyStopInSequence = Infinity;
+
+        for (let i = 0; i < stopsOnSubline.length; i++) {
+            const stop = stopsOnSubline[i];
+            const distanceToStop = haversineDistance(currentLat, currentLng, stop.lat, stop.lon);
+
+            // Check for NaN from haversineDistance
+            if (isNaN(distanceToStop)) {
+                 console.error(`[${busId}] haversineDistance returned NaN for stop ${stop.id} (${stop.nam}). Skipping.`);
+                 continue;
+            }
+
+            if (distanceToStop < minDistanceToAnyStopInSequence) {
+                minDistanceToAnyStopInSequence = distanceToStop;
+                closestStopIndexInSequence = i;
+            }
+        }
+
+        if (closestStopIndexInSequence !== -1) {
+            // The next stops are those in the sequence *after* the closest one found
+            const upcomingStopsList = [];
+
+            // Loop through the stops *after* the closest one found
+            for (let i = closestStopIndexInSequence + 1; i < stopsOnSubline.length; i++) {
+                const stop = stopsOnSubline[i];
+
+                // Calculate estimated distance and time to this specific stop
+                const distanceToThisStop = haversineDistance(currentLat, currentLng, stop.lat, stop.lon);
+                const estimatedTimeToThisStop = calculateEstimatedTime(distanceToThisStop, currentVel);
+
+                // Derive stop_arrival_time and stop_departure_time
+                let stopArrivalTime = estimatedTimeToThisStop; // Use the calculated time as arrival
+                let stopDepartureTime = null;
+                if (stopArrivalTime) {
+                    // Calculate departure time as arrival time + 30 seconds
+                    const arrivalDate = new Date(`${stopArrivalTime.substring(0, 8)}T${stopArrivalTime.substring(9, 11)}:${stopArrivalTime.substring(11, 13)}:${stopArrivalTime.substring(13, 15)}`);
+                    const departureDate = new Date(arrivalDate.getTime() + STOP_DEPARTURE_ADD_SECONDS * 1000);
+                    stopDepartureTime = `${departureDate.getUTCFullYear()}${String(departureDate.getUTCMonth() + 1).padStart(2, '0')}${String(departureDate.getUTCDate()).padStart(2, '0')} ${String(departureDate.getUTCHours()).padStart(2, '0')}${String(departureDate.getUTCMinutes()).padStart(2, '0')}${String(departureDate.getUTCSeconds()).padStart(2, '0')}`;
+                }
+
+                // Add the stop info to the list, including the calculated times
+                upcomingStopsList.push({
+                    stop_id: stop.id,
+                    stop_code: stop.cod,
+                    stop_nam: stop.nam,
+                    // Use the scheduled arrival time from the DB if available, otherwise use the calculated estimate or placeholder
+                    // For now, use the calculated arrival time
+                    arr_t: stopArrivalTime ? stopArrivalTime.replace(' ', '').substring(8) : "000000", // Format as HHMMSS or fallback
+                    // Add the calculated departure time
+                    dep_t: stopDepartureTime ? stopDepartureTime.replace(' ', '').substring(8) : "000030", // Format as HHMMSS or fallback (e.g., arrival + 30s)
+                    // Calculate estimated distance and time based on current pos/vel (relative to the *first* stop in the list for overall estimate)
+                    // Note: The example format shows 'esta_dist' and 'esta_time' relative to the *first* upcoming stop,
+                    // implying these fields in the 'esta-info' message relate to the *next immediate stop*,
+                    // even though the list contains more stops. This is a quirk of the format.
+                    // The 'esta_dist' and 'esta_time' are likely recalculated for each message based on the FIRST stop in the list.
+                    esta_dist: distanceToThisStop, // Distance to the *first* upcoming stop found
+                    esta_time: estimatedTimeToThisStop, // Estimated arrival time at the *first* upcoming stop found
+                });
+
+                // For simplicity in this basic example, let's limit the list to the next few upcoming stops
+                // and recalculate 'esta_dist' and 'esta_time' for each one relative to the bus's *current* position.
+                // A production system would likely calculate these based on the route path and predicted travel times between stops.
+            }
+
+            // The 'esta-info' message format expects:
+            // - stops: Array of upcoming stops (with calculated times/dists)
+            // - pos: Current position and velocity of the bus
+            // - bus: Static or dynamic bus capacity info (made static here)
+            const estaInfoMessage = {
+                type: "esta-info",
+                rt_id: currentRtId,
+                // Use the current timestamp for 'upd' and 'date'
+                upd: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                date: currentTimeFormatted.replace(/\s|-|:/g, ''),
+                stops: upcomingStopsList, // Send the list of upcoming stops
+                pos: { // Send the current position and velocity
+                    lat: currentLat,
+                    lng: currentLng,
+                    vel: currentVel * 3.6, // Convert m/s to km/h
+                    time: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                },
+                bus: { // Static capacity info for now
+                    pas: 0, // Placeholder - get from phone app data if available
+                    cap: 50, // Placeholder
+                    cap_seated: 30, // Placeholder
+                    cap_standing: 20, // Placeholder
+                }
+            };
+
+            // Broadcast the 'esta-info' message
+            broadcastToClients(estaInfoMessage);
+            console.log(`[${busId}] Sent 'esta-info' message for rt_id ${currentRtId}, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
+        } else {
+            console.log(`[${busId}] No upcoming stops found on rt_id ${currentRtId} after the closest stop in sequence.`);
+            // Potentially send an 'esta-info' with an empty stops array or a specific message if the bus is at/near the last stop
+            const emptyEstaInfoMessage = {
+                type: "esta-info",
+                rt_id: currentRtId,
+                upd: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                date: currentTimeFormatted.replace(/\s|-|:/g, ''),
+                stops: [], // Send an empty list if no upcoming stops
+                pos: {
+                    lat: currentLat,
+                    lng: currentLng,
+                    vel: currentVel * 3.6,
+                    time: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                },
+                bus: {
+                    pas: 0,
+                    cap: 50,
+                    cap_seated: 30,
+                    cap_standing: 20,
+                }
+            };
+            broadcastToClients(emptyEstaInfoMessage);
+            console.log(`[${busId}] Sent 'esta-info' message with empty stops list for rt_id ${currentRtId} (likely near end of route).`);
+        }
+    } else {
+        console.log(`[${busId}] Stops for rt_id ${currentRtId} are not available or could not be fetched. Cannot generate 'esta-info'.`);
+    }
+  } else {
+      console.log(`[${busId}] rt_id is unknown, skipping 'esta-info' calculation.`);
+  }
 
   // --- Store/Update Bus State ---
   // Update the state with the new rt_id and history
