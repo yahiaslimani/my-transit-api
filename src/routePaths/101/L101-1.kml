@@ -1,10 +1,6 @@
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document>
 <Placemark id="2389l">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   0    <br>   Id   0    <br>   Order_   1    <br>   Length   539]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.386469,39.548482
 2.386782,39.548483
 2.387224,39.548441
@@ -39,11 +35,7 @@
 2.390209,39.54568
 2.390212,39.545564</coordinates></LineString></Placemark>
 <Placemark id="Lgpsl">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   1    <br>   Id   0    <br>   Order_   2    <br>   Length   742]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.390212,39.545564
 2.390222,39.545324
 2.390228,39.545256
@@ -87,11 +79,7 @@
 2.395904,39.549034
 2.395957,39.549091</coordinates></LineString></Placemark>
 <Placemark id="KJXJs">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   2    <br>   Id   0    <br>   Order_   3    <br>   Length   786]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.395957,39.549091
 2.39661,39.549928
 2.396791,39.550142
@@ -109,11 +97,7 @@
 2.399172,39.555385
 2.39919,39.555585</coordinates></LineString></Placemark>
 <Placemark id="AxowH">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   3    <br>   Id   0    <br>   Order_   4    <br>   Length   2870]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.39919,39.555585
 2.399208,39.555926
 2.399262,39.556753
@@ -261,11 +245,7 @@
 2.421249,39.57074
 2.421271,39.570754</coordinates></LineString></Placemark>
 <Placemark id="gp0Cw">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   4    <br>   Id   0    <br>   Order_   5    <br>   Length   3803]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.421271,39.570754
 2.421401,39.570805
 2.421442,39.570818
@@ -417,11 +397,7 @@
 2.423852,39.541133
 2.423221,39.540403</coordinates></LineString></Placemark>
 <Placemark id="V8bqi">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   5    <br>   Id   0    <br>   Order_   6    <br>   Length   23760]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.423221,39.540403
 2.423154,39.540332
 2.423127,39.540312
@@ -1008,11 +984,7 @@
 2.631236,39.570543
 2.631933,39.570492</coordinates></LineString></Placemark>
 <Placemark id="3GfSW">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   7    <br>   Id   0    <br>   Order_   8    <br>   Length   490]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.631933,39.570492
 2.632355,39.570465
 2.632385,39.570461
@@ -1035,11 +1007,7 @@
 2.634824,39.571142
 2.636544,39.572144</coordinates></LineString></Placemark>
 <Placemark id="lODhv">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   8    <br>   Id   0    <br>   Order_   9    <br>   Length   1053]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.636544,39.572144
 2.63761,39.572805
 2.638054,39.573063
@@ -1083,11 +1051,7 @@
 2.644307,39.576126
 2.645015,39.576151</coordinates></LineString></Placemark>
 <Placemark id="mVxbU">
-<name>0</name><description><![CDATA[0    <br>       <br>   FID   9    <br>   Id   0    <br>   Order_   10    <br>   Length   1608]]></description><ExtendedData>
-  <Data name="styleUrl"><value>#line-FF0000-2000</value></Data>
-  <Data name="stroke-opacity"><value>1</value></Data>
-  <Data name="stroke"><value>#ff0000</value></Data>
-  <Data name="stroke-width"><value>2</value></Data></ExtendedData>
+<name>0</name>
   <LineString><coordinates>2.645015,39.576151
 2.646446,39.576264
 2.646511,39.576272
