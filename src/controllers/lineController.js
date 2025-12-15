@@ -206,8 +206,7 @@ const getLineByCod = async (req, res) => {
             lat: row.stop_lat,
             lon: row.stop_lon,
             nam: row.stop_name,
-            ref: row.stop_ref,
-            dateNotActive: row.stop_date_not_active
+            ref: row.stop_ref
           });
         }
       }

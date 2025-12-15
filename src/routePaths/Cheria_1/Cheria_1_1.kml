@@ -1,7 +1,6 @@
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document>
 <Placemark id="zXWCe">
-<name>Cheria_1_1</name><ExtendedData>
-  <Data name="_umap_options"><value>{"route":{"profile":"driving-car","preference":"recommended","elevation":false,"coordinates":[[7.752162,35.270412],[7.751985,35.270609],[7.752511,35.271117],[7.751857,35.27155],[7.749051,35.268634],[7.748364,35.268572],[7.748198,35.26866],[7.74786,35.268244],[7.747624,35.267754],[7.747699,35.266654],[7.747823,35.265739],[7.748032,35.264324],[7.748815,35.264412]]}}</value></Data></ExtendedData>
+<name>Cheria_1_1</name>
   <LineString><coordinates>7.752155,35.270406
 7.752064,35.270473
 7.751985,35.270572
