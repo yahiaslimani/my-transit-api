@@ -51,8 +51,16 @@ const passengerConnectionsByRoute = new Map();
 
 // --- NEW: Broadcast Function for Specific Routes ---
 // This function will be called by the realtimeProcessor
-function broadcastToRouteClients(rt_id, message) {
-  
+function broadcastToRouteClients(message) {
+  console.log(JSON.stringify(message))
+  const rt_id = message.rt_id; // Access the 'rt_id' property of the 'message' object
+  // Alternative syntax: const rt_id = message['rt_id'];
+
+  // --- VALIDATE rt_id ---
+  if (rt_id == null) { // Check if rt_id is null or undefined
+      console.warn(`[Broadcast] Message object has no 'rt_id' field or it is null/undefined. Message:`, message);
+      return; // Exit the function if rt_id is missing or invalid
+  }
   // Determine the main routeId from the rt_id (e.g., if rt_id is 1011, routeId might be 101)
   // You need to implement this helper function to map the subline ID back to the main line ID.
   getMainRouteIdFromRtId(rt_id).then(routeId => {
