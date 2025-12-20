@@ -143,6 +143,8 @@ wss.on('connection', (ws, request, connectionType, routeId) => {
     // Handle messages from the driver's phone app
     ws.on('message', (data) => {
       try {
+        console.log("Yahia");
+        console.log(data);
         const messageStr = data.toString();
         console.log('Raw message received from driver app:', messageStr);
 
