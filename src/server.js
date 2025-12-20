@@ -143,17 +143,15 @@ wss.on('connection', (ws, request, connectionType, routeId) => {
     // Handle messages from the driver's phone app
     ws.on('message', (data) => {
       try {
-        console.log("Yahia");
-        console.log(data);
         const messageStr = data.toString();
         console.log('Raw message received from driver app:', messageStr);
-
+        
         let parsedData;
         try {
-          parsedData = JSON.parse(messageStr);
+          parsedData = JSON.parse(data.toString());
         } catch (e) {
-          console.error('Error parsing message from driver app as JSON:', e);
-          console.log('Problematic message:', messageStr);
+          //console.error('Error parsing message from driver app as JSON:', e);
+          //console.log('Problematic message:', messageStr);
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON received' }));
           return; // Exit if parsing fails
         }
