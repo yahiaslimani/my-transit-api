@@ -452,7 +452,7 @@ async function processLocationData(rawData) {
          stop_nam: "-" // Placeholder
      };
      // Broadcast the 'close' message using the injected function
-     if (broadcastFunction) {
+     if (broadcastToRouteClientsFunction) {
          broadcastFunction(closeMessage);
          console.log(`[${busId}] Sent 'close' message for old subline rt_id ${previousSublineRtId}.`);
      } else {
@@ -479,7 +479,7 @@ async function processLocationData(rawData) {
     };
 
     // Broadcast the message using the injected function
-    if (broadcastFunction) {
+    if (broadcastToRouteClientsFunction) {
         broadcastFunction(positionMessage);
         console.log(`[${busId}] Sent 'position' message for subline rt_id ${currentSublineRtId} at (${lat}, ${lng}), vel ${velocityKmh.toFixed(2)} km/h`);
     } else {
@@ -619,7 +619,7 @@ async function processLocationData(rawData) {
                 };
 
                 // Broadcast the 'esta-info' message using the injected function
-                if (broadcastFunction) {
+                if (broadcastToRouteClientsFunction) {
                     broadcastFunction(estaInfoMessage);
                     console.log(`[${busId}] Sent 'esta-info' message for subline rt_id ${currentSublineRtId}, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
                 } else {
@@ -647,7 +647,7 @@ async function processLocationData(rawData) {
                         cap_standing: 20,
                     }
                 };
-                if (broadcastFunction) {
+                if (broadcastToRouteClientsFunction) {
                     broadcastFunction(emptyEstaInfoMessage);
                     console.log(`[${busId}] Sent 'esta-info' message with empty stops list for subline rt_id ${currentSublineRtId} (likely near end of route).`);
                 } else {
