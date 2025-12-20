@@ -792,7 +792,9 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
 
     // 3. Check active buses against these specific sublines and their stop sequences
     const potentialDepartures = [];
-
+    console.log("yahia");
+    console.log(activeBusStates.entries());
+    
     for (const [busId, busState] of activeBusStates.entries()) {
       const currentRtId = busState.currentSublineRtId; // Use the determined subline ID (SubLine.id)
 
