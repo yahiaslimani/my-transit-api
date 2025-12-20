@@ -799,7 +799,7 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
       // Check if the bus's current rt_id matches one of the sublines serving the target station
       if (currentRtId && sublineIds.includes(currentRtId)) {
         const currentLat = busState.lat;
-        const currentLon = busState.lng;
+        const currentLng = busState.lng;
         const currentVel = busState.velocity; // Assuming m/s
 
         const stopsOnBusSubline = stopsBySubline.get(currentRtId);
@@ -864,7 +864,7 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
 
             // Bus info (from activeBusStates)
             bus_id: busId,
-            current_pos: { lat: currentLat, lng: currentLon },
+            current_pos: { lat: currentLat, lng: currentLng },
             current_vel: currentVel, // m/s
             estimated_arrival_at_station: estimatedArrivalTime?.toISOString() ?? null, // ISO string or null if not calculable
             estimated_time_seconds: estimatedTimeSeconds, // Raw time in seconds (can be Infinity)
