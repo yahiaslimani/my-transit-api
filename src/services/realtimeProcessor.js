@@ -243,16 +243,17 @@ async function getOrderedStopsForRouteSublines(routeId) {
 
 
 /**
- * Determines the most likely subline (rt_id) for a bus based on its recent movement history and the specified route.
- * This function first fetches the sublines belonging to the route, then compares the average bearing derived
+ * Determines the most likely *subline* ID (the rt_id used for broadcasting) for a bus based on its recent movement history
+ * and the sublines belonging to its main route.
+ * This function first fetches the sublines belonging to the main route, then compares the average bearing derived
  * from the history against the bearing between consecutive stops on *those specific sublines*.
  * @param {string} busId - The unique ID of the bus.
- * @param {number} routeId - The ID of the main route the bus is assigned to (e.g., 3227).
+ * @param {number} mainRouteId - The ID of the main route the bus is assigned to (e.g., 3227).
  * @param {Array<{lat: number, lon: number, timestamp?: string}>} coordHistory - Recent GPS coordinates of the bus.
- * @returns {Promise<number|null>} The matched rt_id (subline.id) or null if no match is found.
+ * @returns {Promise<number|null>} The matched *subline* ID (which is the rt_id for broadcasting) or null if no match is found.
  */
-async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) {
-  console.log(`[${busId}] Attempting to match bus to subline using route ID ${routeId} and history (${coordHistory.length} points).`);
+async function matchBusToSublineByHistoryAndRoute(busId, mainRouteId, coordHistory) {
+  console.log(`[${busId}] Attempting to match bus to subline using main route ID ${mainRouteId} and history (${coordHistory.length} points).`);
 
   if (coordHistory.length < MIN_SIGNALS_FOR_DIRECTION) {
     console.log(`[${busId}] Not enough history points (${coordHistory.length}) to determine direction. Need at least ${MIN_SIGNALS_FOR_DIRECTION}.`);
@@ -265,11 +266,11 @@ async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) 
     return null;
   }
 
-  // --- Fetch Sublines and Stops Belonging to the Specified Route ---
-  console.log(`[${busId}] Fetching sublines and stops for route ID ${routeId}.`);
-  const sublineStopsMap = await getOrderedStopsForRouteSublines(routeId);
+  // --- Fetch Sublines and Stops Belonging to the Specified Main Route ---
+  console.log(`[${busId}] Fetching sublines and stops for main route ID ${mainRouteId}.`);
+  const sublineStopsMap = await getOrderedStopsForRouteSublines(mainRouteId);
   if (sublineStopsMap === null || sublineStopsMap.size === 0) {
-    console.log(`[${busId}] No sublines found for route ID ${routeId}. Cannot match.`);
+    console.log(`[${busId}] No sublines found for main route ID ${mainRouteId}. Cannot match.`);
     return null;
   }
 
@@ -278,7 +279,7 @@ async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) 
   let bestMatchScore = -Infinity; // Higher score is better
 
   for (const [sublineId, stopsOnSubline] of sublineStopsMap.entries()) {
-    console.log(`[${busId}] Evaluating subline ID: ${sublineId} (Route: ${routeId}, Stops: ${stopsOnSubline.length})`);
+    console.log(`[${busId}] Evaluating subline ID (rt_id): ${sublineId} (Main Route: ${mainRouteId}, Stops: ${stopsOnSubline.length})`);
 
     if (stopsOnSubline.length < 2) {
       console.log(`[${busId}] Subline ${sublineId} has fewer than 2 stops, skipping.`);
@@ -290,24 +291,12 @@ async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) 
       const stopA = stopsOnSubline[i];
       const stopB = stopsOnSubline[i + 1];
 
-      // --- CRITICAL FIX: Convert string coordinates to numbers ---
-      // The database might return lat/lon as strings. parseFloat converts them to numbers.
-      const stopALat = parseFloat(stopA.lat);
-      const stopALon = parseFloat(stopA.lon);
-      const stopBLat = parseFloat(stopB.lat);
-      const stopBLon = parseFloat(stopB.lon);
-
-      // Validate the conversion
-      if (isNaN(stopALat) || isNaN(stopALon) || isNaN(stopBLat) || isNaN(stopBLon)) {
-        console.error(`[${busId}] Invalid coordinate values found for stops ${stopA.id} (${stopA.nam}) or ${stopB.id} (${stopB.nam}) on subline ${sublineId}. Skipping segment. Data:`, stopA, stopB);
-        continue; // Skip this segment if coordinates are invalid
-      }
-
       // Calculate the bearing from Stop A to Stop B on this specific subline
-      const routeSegmentBearing = calculateBearing(stopALat, stopALon, stopBLat, stopBLon);
+      const routeSegmentBearing = calculateBearing(stopA.lat, stopA.lon, stopB.lat, stopB.lon);
+
       if (routeSegmentBearing === null) {
-        console.log(`[${busId}] Could not calculate bearing for route segment ${stopA.id} (${stopA.nam}) -> ${stopB.id} (${stopB.nam}) on subline ${sublineId}. Skipping segment.`);
-        continue; // Skip this segment if bearing calculation failed
+          console.log(`[${busId}] Could not calculate bearing for route segment ${stopA.id} (${stopA.nam}) -> ${stopB.id} (${stopB.nam}) on subline ${sublineId}. Skipping segment.`);
+          continue; // Skip this segment if bearing calculation failed
       }
 
       // Calculate the angular difference between the bus's average bearing and the route segment bearing
@@ -325,20 +314,20 @@ async function matchBusToSublineByHistoryAndRoute(busId, routeId, coordHistory) 
 
         if (score > bestMatchScore) {
           bestMatchScore = score;
-          bestMatchSublineId = sublineId;
-          console.log(`[${busId}]     Potential best match found! Subline: ${sublineId}, Score: ${score.toFixed(2)}, Bus Bearing: ${avgBearing.toFixed(2)}°, Segment Bearing: ${routeSegmentBearing.toFixed(2)}°, Diff: ${angleDiff.toFixed(2)}°`);
+          bestMatchSublineId = sublineId; // Use the subline ID (which is the rt_id for broadcasting)
+          console.log(`[${busId}]     Potential best match found! Subline (rt_id): ${sublineId}, Score: ${score.toFixed(2)}, Bus Bearing: ${avgBearing.toFixed(2)}°, Segment Bearing: ${routeSegmentBearing.toFixed(2)}°, Diff: ${angleDiff.toFixed(2)}°`);
         }
       } else {
-        console.log(`[${busId}]     Segment bearing (${routeSegmentBearing.toFixed(2)}°) does not match bus bearing (${avgBearing.toFixed(2)}°) within threshold (${DIRECTION_MATCH_THRESHOLD_DEGREES}°). Diff: ${angleDiff.toFixed(2)}°`);
+           console.log(`[${busId}]     Segment bearing (${routeSegmentBearing.toFixed(2)}°) does not match bus bearing (${avgBearing.toFixed(2)}°) within threshold (${DIRECTION_MATCH_THRESHOLD_DEGREES}°). Diff: ${angleDiff.toFixed(2)}°`);
       }
     }
   }
 
   if (bestMatchSublineId !== null) {
-    console.log(`[${busId}] Matched to subline ID (rt_id) based on route ${routeId} and historical bearing: ${bestMatchSublineId} (Best Score: ${bestMatchScore.toFixed(2)})`);
-    return bestMatchSublineId;
+    console.log(`[${busId}] Matched to subline ID (rt_id for broadcasting): ${bestMatchSublineId} (Best Score: ${bestMatchScore.toFixed(2)})`);
+    return bestMatchSublineId; // Return the subline ID, which is the rt_id for the WebSocket messages
   } else {
-    console.log(`[${busId}] Could not determine best matching subline from ${sublineStopsMap.size} candidates for route ${routeId} based on historical bearing and threshold of ${DIRECTION_MATCH_THRESHOLD_DEGREES}°.`);
+    console.log(`[${busId}] Could not determine best matching subline from ${sublineStopsMap.size} candidates for main route ${mainRouteId} based on historical bearing and threshold of ${DIRECTION_MATCH_THRESHOLD_DEGREES}°.`);
     return null;
   }
 }
@@ -367,24 +356,25 @@ async function getMainRouteIdFromRtId(rtId) {
 
 /**
  * Processes the raw location data received from the phone app.
- * Determines rt_id based on routeId and historical movement, calculates estimates, detects stops, and formats output.
+ * Determines the specific subline rt_id based on main routeId and historical movement, calculates estimates, detects stops, and formats output.
  * @param {object} rawData - The raw data object received from the phone (e.g., {routeId, busId, lat, lng, timestamp, velocity}).
  */
 async function processLocationData(rawData) {
-  const { routeId, busId, lat, lng, timestamp, velocity } = rawData;
+  const { routeId: mainRouteId, busId, lat, lng, timestamp, velocity } = rawData; // 'routeId' now refers to main RouteLine ID
   const currentTimestamp = new Date(timestamp).toISOString(); // Ensure consistent timestamp format
   const currentLat = lat;
   const currentLng = lng;
   const currentVel = velocity; // Assuming velocity is in m/s from Geolocator
-  console.log(`[${busId}] Received raw location data (Route: ${routeId}): Lat=${currentLat}, Lng=${currentLng}, Vel=${currentVel}, TS=${currentTimestamp}`);
+  console.log(`[${busId}] Received raw location data (Main Route: ${mainRouteId}): Lat=${currentLat}, Lng=${currentLng}, Vel=${currentVel}, TS=${currentTimestamp}`);
 
   // --- Retrieve/Initialize Bus State ---
   let busState = activeBusStates.get(busId) || {
     history: [], // Store recent coordinates
-    rtId: null, // Store the determined rt_id (subline ID)
-    lastProcessedRtId: null, // Store the previous rt_id for change detection
+    mainRtId: null, // Store the main routeId (e.g., 3227) the bus is assigned to
+    currentSublineRtId: null, // Store the determined *subline* rt_id (e.g., 1189 or 1190) the bus is currently on
+    lastProcessedSublineRtId: null, // Store the previous subline rt_id for change detection
     lastProcessedTimestamp: null,
-    stopsForCurrentRtId: null, // Cache stops for the current rt_id
+    stopsForCurrentSublineRtId: null, // Cache stops for the current subline rt_id
     // Add other state variables if needed
   };
 
@@ -398,145 +388,140 @@ async function processLocationData(rawData) {
   }
   console.log(`[${busId}] Updated history. Current history size: ${busState.history.length}`);
 
-  // --- Determine rt_id (Subline ID) using RouteId and History ---
-  let currentRtId = busState.rtId; // Start with the previously determined ID
-  let previousRtId = busState.lastProcessedRtId; // Store the ID from the *last processed* message for change detection
+  // --- Determine *Subline* rt_id using Main RouteId and History ---
+  let currentSublineRtId = busState.currentSublineRtId; // Start with the previously determined subline ID
+  let previousSublineRtId = busState.lastProcessedSublineRtId; // Store the ID from the *last processed* message for change detection
 
-  // Only attempt to determine/reconfirm rt_id if we have enough history
-  if (busState.history.length >= MIN_SIGNALS_FOR_DIRECTION) {
-    console.log(`[${busId}] History size (${busState.history.length}) meets minimum requirement (${MIN_SIGNALS_FOR_DIRECTION}). Attempting to determine/reconfirm rt_id using routeId ${routeId}.`);
-    // Use the NEW function that incorporates the routeId
-    const newlyMatchedRtId = await matchBusToSublineByHistoryAndRoute(busId, routeId, [...busState.history]); // Pass a copy to avoid mutation during async op
+  // Only attempt to determine/reconfirm subline rt_id if we have enough history AND the main route matches
+  if (busState.history.length >= MIN_SIGNALS_FOR_DIRECTION && busState.mainRtId === mainRouteId) {
+    console.log(`[${busId}] History size (${busState.history.length}) meets minimum requirement (${MIN_SIGNALS_FOR_DIRECTION}) and main route matches (${mainRouteId}). Attempting to determine/reconfirm subline rt_id.`);
+    // Use the NEW function that incorporates the main routeId to find the specific subline
+    const newlyMatchedSublineRtId = await matchBusToSublineByHistoryAndRoute(busId, mainRouteId, [...busState.history]); // Pass a copy to avoid mutation during async op
 
-    if (newlyMatchedRtId !== null) {
-      if (currentRtId === null) {
-        // First time an rt_id is determined for this bus instance
-        currentRtId = newlyMatchedRtId;
-        console.log(`[${busId}] First rt_id determined for route ${routeId}: ${currentRtId}`);
-      } else if (currentRtId !== newlyMatchedRtId) {
-        // Detected a potential route change
-        console.log(`[${busId}] Potential route/direction change detected on route ${routeId}! Previous rt_id: ${currentRtId}, New match: ${newlyMatchedRtId}.`);
-        // For now, let's update the rt_id. You might want more sophisticated logic here
-        // (e.g., require multiple consecutive matches for a new rt_id before switching).
-        currentRtId = newlyMatchedRtId;
+    if (newlyMatchedSublineRtId !== null) {
+      if (currentSublineRtId === null) {
+        // First time a subline rt_id is determined for this bus instance on this main route
+        currentSublineRtId = newlyMatchedSublineRtId;
+        console.log(`[${busId}] First subline rt_id (on main route ${mainRouteId}) determined: ${currentSublineRtId}`);
+      } else if (currentSublineRtId !== newlyMatchedSublineRtId) {
+        // Detected a potential subline change (e.g., from Way to Back on the same main route)
+        console.log(`[${busId}] Potential subline change detected on main route ${mainRouteId}! Previous subline rt_id: ${currentSublineRtId}, New match: ${newlyMatchedSublineRtId}.`);
+        // For now, let's update the subline rt_id. You might want more sophisticated logic here
+        // (e.g., require multiple consecutive matches for a new subline rt_id before switching).
+        currentSublineRtId = newlyMatchedSublineRtId;
       } else {
-        // Match confirmed, rt_id remains the same
-        console.log(`[${busId}] rt_id confirmed as ${currentRtId} (on route ${routeId}) based on history.`);
+        // Match confirmed, subline rt_id remains the same
+        console.log(`[${busId}] Subline rt_id confirmed as ${currentSublineRtId} (on main route ${mainRouteId}) based on history.`);
       }
     } else {
-      console.log(`[${busId}] Route/History-based matching returned null for route ${routeId}. Keeping previous rt_id: ${currentRtId}`);
-      // Keep the currentRtId as is if matching failed.
+        console.log(`[${busId}] Subline/History-based matching returned null for main route ${mainRouteId}. Keeping previous subline rt_id: ${currentSublineRtId}`);
+        // Keep the currentSublineRtId as is if matching failed.
     }
   } else {
-    console.log(`[${busId}] Not enough history yet (${busState.history.length}) to determine rt_id using route ${routeId}. Keeping previous rt_id: ${currentRtId}`);
+      if (busState.history.length < MIN_SIGNALS_FOR_DIRECTION) {
+          console.log(`[${busId}] Not enough history yet (${busState.history.length}) to determine subline rt_id.`);
+      }
+      if (busState.mainRtId !== mainRouteId) {
+          console.log(`[${busId}] Main route changed from ${busState.mainRtId} to ${mainRouteId}. Resetting subline state.`);
+          // If the main route changed, reset the subline-specific state
+          busState.mainRtId = mainRouteId;
+          busState.currentSublineRtId = null;
+          busState.lastProcessedSublineRtId = null;
+          busState.stopsForCurrentSublineRtId = null; // Reset cached stops
+          currentSublineRtId = null; // Set current to null to trigger re-matching on next data
+      }
   }
 
-  // --- Handle Route Changes (Send 'close' for old route if applicable) ---
+
+  // --- Handle Subline Changes (Send 'close' for old subline if applicable) ---
   // This logic would go here if implemented (requires tracking previous state and comparing rt_ids)
-  if (previousRtId && previousRtId !== currentRtId) {
-     console.log(`[${busId}] Route change detected: ${previousRtId} -> ${currentRtId}. Sending 'close' for old route.`);
-     // Determine the main route ID for the *old* rt_id
-     const previousRouteId = await getMainRouteIdFromRtId(previousRtId);
-     if (previousRouteId) {
-         const closeMessage = {
-             type: "close",
-             rt_id: previousRtId,
-             // Format timestamp as "YYYYMMDD HHmmss"
-             upd: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
-             date: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
-             del: 0, // Delay placeholder
-             pass: "0", // Passengers placeholder
-             lat: busState.history[busState.history.length - 2]?.lat || currentLat, // Previous known lat if available
-             lng: busState.history[busState.history.length - 2]?.lng || currentLng, // Previous known lng if available
-             stop_id: 0, // Placeholder
-             stop_code: "-", // Placeholder
-             stop_nam: "-" // Placeholder
-         };
-         // Broadcast the 'close' message using the function that targets the route
-         if (broadcastToRouteClientsFunction) {
-             broadcastToRouteClientsFunction(previousRtId, closeMessage); // Send to the route associated with the *old* rt_id
-         } else {
-             console.warn(`[${busId}] Broadcast function not available, cannot send 'close' message for old rt_id ${previousRtId}.`);
-         }
+  if (previousSublineRtId && previousSublineRtId !== currentSublineRtId) {
+     console.log(`[${busId}] Subline change detected: ${previousSublineRtId} -> ${currentSublineRtId}. Sending 'close' for old subline.`);
+     const closeMessage = {
+         type: "close",
+         rt_id: previousSublineRtId, // Use the old subline rt_id
+         // Format timestamp as "YYYYMMDD HHmmss"
+         upd: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
+         date: busState.lastProcessedTimestamp ? busState.lastProcessedTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, '') : currentTimestamp.replace('T', ' ').substring(0, 17).replace(/\..*$/, '').replace(/[-:]/g, ''),
+         del: 0, // Delay placeholder
+         pass: "0", // Passengers placeholder
+         lat: busState.history[busState.history.length - 2]?.lat || currentLat, // Previous known lat if available
+         lng: busState.history[busState.history.length - 2]?.lng || currentLng, // Previous known lng if available
+         stop_id: 0, // Placeholder
+         stop_code: "-", // Placeholder
+         stop_nam: "-" // Placeholder
+     };
+     // Broadcast the 'close' message using the injected function
+     if (broadcastFunction) {
+         broadcastFunction(closeMessage);
+         console.log(`[${busId}] Sent 'close' message for old subline rt_id ${previousSublineRtId}.`);
      } else {
-         console.warn(`[${busId}] Could not determine main routeId for old rt_id ${previousRtId}, skipping 'close' message.`);
+         console.warn(`[${busId}] Broadcast function not available, cannot send 'close' message for old subline rt_id ${previousSublineRtId}.`);
      }
   }
-  // --- Format and Send 'position' message (if rt_id is known) ---
-  if (currentRtId !== null) {
+
+
+  // --- Format and Send 'position' message (if subline rt_id is known) ---
+  if (currentSublineRtId !== null) {
     // Convert velocity from m/s (Geolocator) to km/h if expected by frontend
     const velocityKmh = currentVel * 3.6;
 
     const positionMessage = {
       type: "position",
-      rt_id: currentRtId,
+      rt_id: currentSublineRtId, // Use the *subline* ID as the rt_id for broadcasting
       // Format timestamp as "YYYYMMDD HHmmss"
       upd: currentTimestamp.replace('T', ' ').substring(0, 19).replace(/\..*$/, '').replace(/[-:]/g, ''),
       date: currentTimestamp.replace('T', ' ').substring(0, 19).replace(/\..*$/, '').replace(/[-:]/g, ''),
-      lat: currentLat,
-      lng: currentLng,
+      lat: lat,
+      lng: lng,
+      // Convert velocity from m/s to km/h if the expected format is km/h
       vel: velocityKmh // Use converted velocity
     };
 
-   // Broadcast the message to clients subscribed to the *main route* associated with this rt_id
-    if (broadcastToRouteClientsFunction) {
-        broadcastToRouteClientsFunction(currentRtId, positionMessage); // Pass the rt_id, function figures out the main route
-        console.log(`[${busId}] Sent 'position' message for rt_id ${currentRtId} (on main route) to route-specific clients.`);
+    // Broadcast the message using the injected function
+    if (broadcastFunction) {
+        broadcastFunction(positionMessage);
+        console.log(`[${busId}] Sent 'position' message for subline rt_id ${currentSublineRtId} at (${lat}, ${lng}), vel ${velocityKmh.toFixed(2)} km/h`);
     } else {
-        console.warn(`[${busId}] Broadcast function not available, cannot send 'position' message for rt_id ${currentRtId}.`);
+        console.warn(`[${busId}] Broadcast function not available, cannot send 'position' message for subline rt_id ${currentSublineRtId}.`);
     }
   } else {
-    console.log(`[${busId}] rt_id is unknown (after checking route ${routeId}), skipping 'position' message.`);
+    console.log(`[${busId}] Subline rt_id is unknown (after checking main route ${mainRouteId}), skipping 'position' message.`);
     // Potentially send an error message or a status update to the client if rt_id cannot be determined
-    // broadcastToClients({ type: 'error', busId, message: 'Unable to determine route/direction' });
+    // if (broadcastFunction) broadcastFunction({ type: 'error', busId, message: 'Unable to determine route/direction' });
   }
-  // --- Determine Upcoming Stops and Send 'esta-info' (if rt_id is known and subline data is available) ---
-  if (currentRtId !== null) {
+
+
+  // --- Determine Upcoming Stops and Send 'esta-info' (if subline rt_id is known and subline data is available) ---
+  if (currentSublineRtId !== null) {
     // Check if stops for this subline are already known and cached in busState or globally
-    if (!busState.stopsForCurrentRtId || busState.stopsForCurrentRtId.rtId !== currentRtId) {
-         console.log(`[${busId}] Fetching stops for newly matched/confirmed rt_id: ${currentRtId}`);
-         // We need the routeId to fetch stops. We could pass routeId from the raw data if needed,
-         // or store it in the busState when rt_id is first matched.
-         // For now, let's assume we can get the routeId somehow when needed.
-         // A better approach might be to store the routeId alongside rt_id in the busState when matching occurs.
-         // This requires fetching the routeId from the SubLine table using the rt_id.
-         // Let's fetch the stops directly using the currentRtId (subline.id)
-         const stopsForSublineQuery = `
-            SELECT s.id, s.cod, s.lat, s.lon, s.nam, s.ref, sls.stoporder
-            FROM "Stop" s
-            JOIN "SubLineStop" sls ON s.id = sls.stopid
-            JOIN "SubLine" sl ON sls.sublineid = sl.id
-            WHERE sl.id = $1 -- Filter by the specific SubLine ID (rt_id)
-            ORDER BY sls.stoporder ASC; -- Order by the sequence on this specific subline
-         `;
-         try {
-             const stopsResult = await pool.query(stopsForSublineQuery, [currentRtId]);
-             if (stopsResult.rows.length > 0) {
-                 busState.stopsForCurrentRtId = { rtId: currentRtId, stops: stopsResult.rows };
-                 console.log(`[${busId}] Cached ${busState.stopsForCurrentRtId.stops.length} stops for rt_id ${currentRtId}`);
-             } else {
-                 console.warn(`[${busId}] Could not fetch stops for rt_id ${currentRtId}. Cannot generate 'esta-info'.`);
-                 busState.stopsForCurrentRtId = { rtId: currentRtId, stops: [] }; // Mark as fetched but empty/failed
-             }
-         } catch (error) {
-             console.error(`[${busId}] Error fetching stops for rt_id ${currentRtId}:`, error);
-             busState.stopsForCurrentRtId = { rtId: currentRtId, stops: [] }; // Mark as failed
+    if (!busState.stopsForCurrentSublineRtId || busState.stopsForCurrentSublineRtId.rtId !== currentSublineRtId) {
+         console.log(`[${busId}] Fetching stops for newly matched/confirmed subline rt_id: ${currentSublineRtId}`);
+         // We need the mainRouteId to fetch stops via getOrderedStopsForRouteSublines.
+         // This function fetches stops for ALL sublines of the main route.
+         // We then need to pick the stops for the specific currentSublineRtId.
+         const allStopsForMainRoute = await getOrderedStopsForRouteSublines(mainRouteId); // Fetch stops for the main route
+         if (allStopsForMainRoute && allStopsForMainRoute.has(currentSublineRtId)) { // Check if the specific subline ID exists in the map
+             busState.stopsForCurrentSublineRtId = { rtId: currentSublineRtId, stops: allStopsForMainRoute.get(currentSublineRtId) }; // Get stops for the specific subline ID
+             console.log(`[${busId}] Cached ${busState.stopsForCurrentSublineRtId.stops.length} stops for subline rt_id ${currentSublineRtId}`);
+         } else {
+             console.warn(`[${busId}] Could not fetch or find stops for subline rt_id ${currentSublineRtId} (on main route ${mainRouteId}). Cannot generate 'esta-info'.`);
+             busState.stopsForCurrentSublineRtId = { rtId: currentSublineRtId, stops: [] }; // Mark as fetched but empty/failed
          }
     }
 
-    if (busState.stopsForCurrentRtId && busState.stopsForCurrentRtId.rtId === currentRtId && busState.stopsForCurrentRtId.stops.length > 0) {
-        const stopsOnSubline = busState.stopsForCurrentRtId.stops;
+    if (busState.stopsForCurrentSublineRtId && busState.stopsForCurrentSublineRtId.rtId === currentSublineRtId && busState.stopsForCurrentSublineRtId.stops.length > 0) {
+        const stopsOnSubline = busState.stopsForCurrentSublineRtId.stops;
         const currentTimeFormatted = currentTimestamp.replace('T', ' ').substring(0, 19).replace(/\..*$/, ''); // Format for 'upd'/'date'
 
         // Find the index of the *next* stop in the sequence based on current position
-        // This is a simplified approach: find the closest upcoming stop *in the sequence*.
+        // This is a simplified approach: find the stop in the sequence closest to the current bus position *that comes after* the bus's last known position in the sequence.
+        // A more robust method involves path-following and distance calculations along the route path between stops.
         let nextStopIndex = -1;
         let minDistanceToNextStop = Infinity;
 
-        // Start searching from the stop *after* the one we last knew the bus was closest to (or from the beginning if unknown)
-        // We need to find the current position relative to the stop sequence.
-        // A simple heuristic: find the stop in the sequence closest to the current bus position.
-        // Then, the *next* stops in the *sequence* (with higher stoporder) are the upcoming ones.
+        // Find the index of the closest stop in the *sequence* to the bus's *current position*
+        // This determines where the bus is in the sequence.
         let closestStopIndexInSequence = -1;
         let minDistanceToAnyStopInSequence = Infinity;
 
@@ -557,18 +542,20 @@ async function processLocationData(rawData) {
         }
 
         if (closestStopIndexInSequence !== -1) {
-            // The next stops are those in the sequence *after* the closest one found
             const upcomingStopsList = [];
 
-            // Loop through the stops *after* the closest one found
+            // Loop through the stops *after* the closest one found in the sequence
+            // These are the "upcoming" stops based on the determined direction (subline path).
             for (let i = closestStopIndexInSequence + 1; i < stopsOnSubline.length; i++) {
                 const stop = stopsOnSubline[i];
 
                 // Calculate estimated distance and time to this specific stop
+                // This is a basic estimate based on straight-line distance and current speed.
+                // A more accurate estimate would consider the route path geometry between points.
                 const distanceToThisStop = haversineDistance(currentLat, currentLng, stop.lat, stop.lon);
-                const estimatedTimeToThisStop = calculateEstimatedTime(distanceToThisStop, currentVel);
+                const estimatedTimeToThisStop = calculateEstimatedTime(distanceToThisStop, currentVel); // Implement this function
 
-                // Derive stop_arrival_time and stop_departure_time
+                // Derive stop_arrival_time and stop_departure_time (basic estimation based on distance/velocity)
                 let stopArrivalTime = estimatedTimeToThisStop; // Use the calculated time as arrival
                 let stopDepartureTime = null;
                 if (stopArrivalTime) {
@@ -600,87 +587,321 @@ async function processLocationData(rawData) {
                 // For simplicity in this basic example, let's limit the list to the next few upcoming stops
                 // and recalculate 'esta_dist' and 'esta_time' for each one relative to the bus's *current* position.
                 // A production system would likely calculate these based on the route path and predicted travel times between stops.
+                if (upcomingStopsList.length >= 5) { // e.g., show next 5 stops
+                    break;
+                }
             }
 
-            // The 'esta-info' message format expects:
-            // - stops: Array of upcoming stops (with calculated times/dists)
-            // - pos: Current position and velocity of the bus
-            // - bus: Static or dynamic bus capacity info (made static here)
-            const estaInfoMessage = {
-                type: "esta-info",
-                rt_id: currentRtId,
-                // Use the current timestamp for 'upd' and 'date'
-                upd: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
-                date: currentTimeFormatted.replace(/\s|-|:/g, ''),
-                stops: upcomingStopsList, // Send the list of upcoming stops
-                pos: { // Send the current position and velocity
-                    lat: currentLat,
-                    lng: currentLng,
-                    vel: currentVel * 3.6, // Convert m/s to km/h
-                    time: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
-                },
-                bus: { // Static capacity info for now
-                    pas: 0, // Placeholder - get from phone app data if available
-                    cap: 50, // Placeholder
-                    cap_seated: 30, // Placeholder
-                    cap_standing: 20, // Placeholder
-                }
-            };
+            if (upcomingStopsList.length > 0) {
+                // The 'esta-info' message format expects:
+                // - stops: Array of upcoming stops (with calculated times/dists)
+                // - pos: Current position and velocity of the bus
+                // - bus: Static or dynamic bus capacity info (made static here)
+                const estaInfoMessage = {
+                    type: "esta-info",
+                    rt_id: currentSublineRtId, // Use the *subline* ID as the rt_id for broadcasting
+                    // Use the current timestamp for 'upd' and 'date'
+                    upd: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                    date: currentTimeFormatted.replace(/\s|-|:/g, ''),
+                    stops: upcomingStopsList, // Send the list of upcoming stops
+                    pos: { // Send the current position and velocity
+                        lat: currentLat,
+                        lng: currentLng,
+                        vel: currentVel * 3.6, // Convert m/s to km/h
+                        time: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                    },
+                    bus: { // Static capacity info for now
+                        pas: 0, // Placeholder - get from phone app data if available
+                        cap: 50, // Placeholder
+                        cap_seated: 30, // Placeholder
+                        cap_standing: 20, // Placeholder
+                    }
+                };
 
-            // Broadcast the 'esta-info' message using the function that targets the route
-            if (broadcastToRouteClientsFunction) {
-                broadcastToRouteClientsFunction(currentRtId, estaInfoMessage); // Send to the route associated with this rt_id
-                console.log(`[${busId}] Sent 'esta-info' message for rt_id ${currentRtId} (on main route) to route-specific clients, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
+                // Broadcast the 'esta-info' message using the injected function
+                if (broadcastFunction) {
+                    broadcastFunction(estaInfoMessage);
+                    console.log(`[${busId}] Sent 'esta-info' message for subline rt_id ${currentSublineRtId}, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
+                } else {
+                    console.warn(`[${busId}] Broadcast function not available, cannot send 'esta-info' message for subline rt_id ${currentSublineRtId}.`);
+                }
             } else {
-                console.warn(`[${busId}] Broadcast function not available, cannot send 'esta-info' message for rt_id ${currentRtId}.`);
+                console.log(`[${busId}] No upcoming stops found on subline rt_id ${currentSublineRtId} after the closest stop in sequence.`);
+                // Potentially send an 'esta-info' with an empty stops array or a specific message if the bus is at/near the last stop
+                const emptyEstaInfoMessage = {
+                    type: "esta-info",
+                    rt_id: currentSublineRtId, // Use the *subline* ID
+                    upd: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                    date: currentTimeFormatted.replace(/\s|-|:/g, ''),
+                    stops: [], // Send an empty list if no upcoming stops
+                    pos: {
+                        lat: currentLat,
+                        lng: currentLng,
+                        vel: currentVel * 3.6,
+                        time: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
+                    },
+                    bus: {
+                        pas: 0,
+                        cap: 50,
+                        cap_seated: 30,
+                        cap_standing: 20,
+                    }
+                };
+                if (broadcastFunction) {
+                    broadcastFunction(emptyEstaInfoMessage);
+                    console.log(`[${busId}] Sent 'esta-info' message with empty stops list for subline rt_id ${currentSublineRtId} (likely near end of route).`);
+                } else {
+                    console.warn(`[${busId}] Broadcast function not available, cannot send empty 'esta-info' message for subline rt_id ${currentSublineRtId}.`);
+                }
             }
         } else {
-            console.log(`[${busId}] No upcoming stops found on rt_id ${currentRtId} after the closest stop in sequence.`);
-            // Potentially send an 'esta-info' with an empty stops array or a specific message if the bus is at/near the last stop
-            const emptyEstaInfoMessage = {
-                type: "esta-info",
-                rt_id: currentRtId,
-                upd: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
-                date: currentTimeFormatted.replace(/\s|-|:/g, ''),
-                stops: [], // Send an empty list if no upcoming stops
-                pos: {
-                    lat: currentLat,
-                    lng: currentLng,
-                    vel: currentVel * 3.6,
-                    time: currentTimeFormatted.replace(/\s|-|:/g, ''), // Format as YYYYMMDD HHmmss
-                },
-                bus: {
-                    pas: 0,
-                    cap: 50,
-                    cap_seated: 30,
-                    cap_standing: 20,
-                }
-            };
-            if (broadcastToRouteClientsFunction) {
-                broadcastToRouteClientsFunction(currentRtId, emptyEstaInfoMessage); // Send to the route associated with this rt_id
-                console.log(`[${busId}] Sent 'esta-info' message with empty stops list for rt_id ${currentRtId} (likely near end of route on main route) to route-specific clients.`);
-            } else {
-                console.warn(`[${busId}] Broadcast function not available, cannot send empty 'esta-info' message for rt_id ${currentRtId}.`);
-            }
+            console.log(`[${busId}] Could not find any stops on subline rt_id ${currentSublineRtId} close enough to determine sequence position.`);
+            // Potentially send an 'esta-info' with an empty stops array or a specific message if the bus is far from the route
         }
     } else {
-        console.log(`[${busId}] Stops for rt_id ${currentRtId} are not available or could not be fetched. Cannot generate 'esta-info'.`);
+        console.log(`[${busId}] Stops for subline rt_id ${currentSublineRtId} are not available or could not be fetched. Cannot generate 'esta-info'.`);
     }
   } else {
-      console.log(`[${busId}] rt_id is unknown, skipping 'esta-info' calculation.`);
+      console.log(`[${busId}] Subline rt_id is unknown, skipping 'esta-info' calculation.`);
   }
 
+
   // --- Store/Update Bus State ---
-  // Update the state with the new rt_id and history
-  busState.rtId = currentRtId;
-  busState.lastProcessedRtId = currentRtId; // Update the ID used for *next* change detection
+  // Update the state with the new mainRouteId, sublineRtId, and history
+  busState.mainRtId = mainRouteId; // Update the main route ID
+  busState.currentSublineRtId = currentSublineRtId; // Update the *subline* rt_id
+  busState.lastProcessedSublineRtId = currentSublineRtId; // Update the ID used for *next* change detection
   busState.lastProcessedTimestamp = currentTimestamp; // Update the timestamp used for *next* message
   activeBusStates.set(busId, busState);
 
-  console.log(`[${busId}] Finished processing location data. Current rt_id: ${currentRtId}, History length: ${busState.history.length}.`);
+  console.log(`[${busId}] Finished processing location data. Current main route: ${mainRouteId}, Current subline rt_id: ${currentSublineRtId}, History length: ${busState.history.length}.`);
+}
+
+// --- NEW: Helper Function to Find Upcoming Stops on a Specific Subline ---
+/**
+ * Finds stops that come *after* the bus's current position in the sequence of a specific subline.
+ * @param {Array} stopsOnSubline - The ordered array of stops for the subline (from DB query).
+ * @param {number} currentLat - The bus's current latitude.
+ * @param {number} currentLng - The bus's current longitude.
+ * @returns {{closestStopIndex: number, upcomingStops: Array}|null} Object containing the index of the closest stop and the array of upcoming stops, or null if no stops found nearby.
+ */
+function findUpcomingStopsOnSubline(stopsOnSubline, currentLat, currentLng) {
+  if (!stopsOnSubline || stopsOnSubline.length === 0) {
+    console.warn('[RealtimeProcessor] No stops provided to findUpcomingStopsOnSubline.');
+    return null;
+  }
+
+  let closestStopIndexInSequence = -1;
+  let minDistanceToAnyStopInSequence = Infinity;
+
+  // Find the stop in the subline sequence closest to the bus's *current* position
+  for (let i = 0; i < stopsOnSubline.length; i++) {
+    const stop = stopsOnSubline[i];
+    const distanceToStop = haversineDistance(currentLat, currentLng, stop.lat, stop.lon);
+
+    if (isNaN(distanceToStop)) {
+         console.error('[RealtimeProcessor] haversineDistance returned NaN for stop:', stop);
+         continue;
+    }
+
+    if (distanceToStop < minDistanceToAnyStopInSequence) {
+        minDistanceToAnyStopInSequence = distanceToStop;
+        closestStopIndexInSequence = i;
+    }
+  }
+
+  if (closestStopIndexInSequence === -1) {
+      console.log('[RealtimeProcessor] Could not find any stops on the subline close enough to determine sequence position.');
+      return null;
+  }
+
+  // The upcoming stops are those *after* the closest one found in the sequence
+  const upcomingStops = stopsOnSubline.slice(closestStopIndexInSequence + 1);
+
+  console.log(`[RealtimeProcessor] Found ${upcomingStops.length} upcoming stops after closest stop index ${closestStopIndexInSequence} on subline.`);
+
+  return {
+    closestStopIndex: closestStopIndexInSequence,
+    upcomingStops: upcomingStops
+  };
 }
 
 
+// --- NEW: Function to Get Sublines with Buses Heading to a Specific Station ---
+/**
+ * Finds sublines that have active buses heading towards a specific station.
+ * Buses are considered "heading towards" if they are currently located before the station
+ * in the subline's stop sequence and are moving in that direction.
+ *
+ * @param {object} targetStation - The target station object containing its ID (e.g., { id: 984, cod: "40036", ... }).
+ * @param {number} numberOfDepartures - The maximum number of sublines with active buses to return.
+ * @returns {Promise<Array<object>>} An array of subline information objects with associated bus data, sorted by estimated arrival time.
+ */
+async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) {
+  const targetStationId = targetStation.id;
+  const limit = numberOfDepartures;
+
+  console.log(`[RealtimeProcessor] Searching for sublines with buses heading to station ID: ${targetStationId}, limit: ${limit}`);
+
+  try {
+    // 1. Find all sublines that include the target station
+    // This query gets the subline ID (rt_id) directly, which is the SubLine.id
+    const sublinesForStationQuery = `
+      SELECT sl.id AS subline_id -- This is the rt_id used for broadcasting
+      FROM "SubLine" sl
+      JOIN "SubLineStop" sls ON sl.id = sls.sublineid
+      WHERE sls.stopid = $1
+      ORDER BY sl.id; -- Order by subline ID for consistency
+    `;
+    const sublinesResult = await pool.query(sublinesForStationQuery, [targetStationId]);
+    const sublineIds = sublinesResult.rows.map(row => row.subline_id);
+
+    if (sublineIds.length === 0) {
+      console.log(`[RealtimeProcessor] No sublines found serving station ID ${targetStationId}.`);
+      return [];
+    }
+
+    console.log(`[RealtimeProcessor] Found ${sublineIds.length} subline(s) serving station ID ${targetStationId}:`, sublineIds);
+
+    // 2. Get the ordered stops for each of these specific sublines
+    // This query fetches stops for multiple specific subline IDs efficiently
+    const stopsForSublinesQuery = `
+      SELECT sls.sublineid, s.id AS stop_id, s.cod AS stop_cod, s.nam AS stop_nam, s.lat AS stop_lat, s.lon AS stop_lon, sls.stoporder AS stop_order
+      FROM "SubLineStop" sls
+      JOIN "Stop" s ON sls.stopid = s.id
+      WHERE sls.sublineid = ANY($1) -- Use the array of specific subline IDs
+      ORDER BY sls.sublineid, sls.stoporder ASC; -- Order by subline first, then by stop order within each subline
+    `;
+    const stopsResult = await pool.query(stopsForSublinesQuery, [sublineIds]);
+
+    // Organize the stops by subline ID for quick lookup
+    const stopsBySubline = new Map();
+    stopsResult.rows.forEach(row => {
+      if (!stopsBySubline.has(row.sublineid)) {
+        stopsBySubline.set(row.sublineid, []);
+      }
+      stopsBySubline.get(row.sublineid).push({
+        id: row.stop_id,
+        cod: row.stop_cod,
+        nam: row.stop_nam,
+        lat: row.stop_lat,
+        lon: row.stop_lon,
+        order: row.stop_order,
+      });
+    });
+
+    // 3. Check active buses against these specific sublines and their stop sequences
+    const potentialDepartures = [];
+
+    for (const [busId, busState] of activeBusStates.entries()) {
+      const currentRtId = busState.currentSublineRtId; // Use the determined subline ID (SubLine.id)
+
+      // Check if the bus's current rt_id matches one of the sublines serving the target station
+      if (currentRtId && sublineIds.includes(currentRtId)) {
+        const currentLat = busState.lat;
+        const currentLon = busState.lng;
+        const currentVel = busState.velocity; // Assuming m/s
+
+        const stopsOnBusSubline = stopsBySubline.get(currentRtId);
+
+        if (!stopsOnBusSubline || stopsOnBusSubline.length === 0) {
+          console.warn(`[RealtimeProcessor] No stops found for active bus ${busId} on rt_id ${currentRtId} (which serves target station ${targetStationId}). Cannot determine direction.`);
+          continue; // Skip this bus if its subline stops are unknown in our fetched data
+        }
+
+        // Find the target station's index within the bus's current subline sequence
+        const targetStopIndex = stopsOnBusSubline.findIndex(stop => stop.id === targetStationId);
+
+        if (targetStopIndex === -1) {
+          // This should ideally not happen if sublinesForStationQuery was correct and stops were fetched correctly for that subline ID
+          console.warn(`[RealtimeProcessor] Target station ${targetStationId} not found in stop sequence for bus ${busId}'s current rt_id ${currentRtId}. This is unexpected.`);
+          continue;
+        }
+
+        // Use the helper function to find the bus's position in the sequence and upcoming stops
+        const sequenceInfo = findUpcomingStopsOnSubline(stopsOnBusSubline, currentLat, currentLng);
+        if (!sequenceInfo) {
+            console.log(`[RealtimeProcessor] Could not determine sequence position for bus ${busId} on rt_id ${currentRtId}. Skipping.`);
+            continue;
+        }
+
+        const { closestStopIndex, upcomingStops } = sequenceInfo;
+
+        // 4. Determine if the target station is in the list of upcoming stops
+        // This means the bus is currently located *before* the target station in the subline's sequence.
+        // A simple check: is the target stop's index *after* the closest stop's index?
+        if (targetStopIndex > closestStopIndex) {
+          // Calculate estimated time/distance to the target station
+          // This is a basic estimate using haversine distance and current speed along the *straight line*.
+          // A more accurate estimate would use the route path geometry between stops.
+          const targetStopDetails = stopsOnBusSubline[targetStopIndex];
+          const distanceToTarget = haversineDistance(currentLat, currentLng, targetStopDetails.lat, targetStopDetails.lon);
+          let estimatedTimeSeconds = Infinity;
+          let estimatedArrivalTime = null;
+          if (currentVel > 0.5) { // Threshold for "moving" (e.g., 0.5 m/s)
+              estimatedTimeSeconds = distanceToTarget / currentVel; // Time in seconds
+              estimatedArrivalTime = new Date(Date.now() + estimatedTimeSeconds * 1000);
+          } else {
+              console.log(`[RealtimeProcessor] Bus ${busId} is stationary or moving slowly (< 0.5 m/s), cannot calculate arrival time to station ${targetStationId}.`);
+              // Depending on requirements, you might still include it with estimated_time_seconds = Infinity or null,
+              // or exclude it entirely if it's not actively approaching.
+              // For now, let's include it but mark the time as unavailable or infinite.
+              estimatedTimeSeconds = Infinity; // Or null, depending on how the frontend handles it
+              estimatedArrivalTime = null; // Or a specific string like "N/A"
+          }
+
+          // Find the subline details from the initial query result (or potentially fetch name/code separately if needed)
+          // For now, we'll use the rt_id (subline.id) itself and get name/code if required by the API spec later.
+          // Assume we have subline details from the initial fetch if needed for response formatting.
+
+          // Add this potential departure to the list
+          potentialDepartures.push({
+            // Subline info (from DB query - this is the rt_id)
+            rt_id: currentRtId, // This is the SubLine.id
+            // Optional: Add subline code, name if needed for the API response
+            // subline_code: ... (fetch from SubLine table if not already cached)
+            // subline_name: ... (fetch from SubLine table if not already cached)
+
+            // Bus info (from activeBusStates)
+            bus_id: busId,
+            current_pos: { lat: currentLat, lng: currentLon },
+            current_vel: currentVel, // m/s
+            estimated_arrival_at_station: estimatedArrivalTime?.toISOString() ?? null, // ISO string or null if not calculable
+            estimated_time_seconds: estimatedTimeSeconds, // Raw time in seconds (can be Infinity)
+            distance_to_station_meters: distanceToTarget, // Raw distance in meters
+            // Add other bus-specific info if needed (e.g., passenger count if available from phone app data)
+          });
+
+          console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}) is heading towards station ${targetStationId} (index ${targetStopIndex}). Est. time: ${estimatedTimeSeconds}s.`);
+        } else {
+            // The target station is *before* or *at* the bus's current position in the sequence, so it's not upcoming.
+            console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}) is past or at the target station ${targetStationId} (current seq index: ${closestStopIndex}, target seq index: ${targetStopIndex}).`);
+        }
+      }
+      // else: Bus is on a subline not serving the target station, ignore it.
+    }
+
+    // 5. Sort potential departures by estimated arrival time (ascending - soonest first)
+    // Handle Infinity values appropriately in sorting (put them at the end)
+    potentialDepartures.sort((a, b) => {
+      if (a.estimated_time_seconds === Infinity && b.estimated_time_seconds === Infinity) return 0;
+      if (a.estimated_time_seconds === Infinity) return 1;
+      if (b.estimated_time_seconds === Infinity) return -1;
+      return a.estimated_time_seconds - b.estimated_time_seconds;
+    });
+
+    // 6. Limit the results if requested
+    const finalDepartures = potentialDepartures.slice(0, limit);
+
+    console.log(`[RealtimeProcessor] Found ${finalDepartures.length} subline(s) with active buses heading towards station ID ${targetStationId} (limited to ${limit}).`);
+    return finalDepartures;
+
+  } catch (error) {
+    console.error(`[RealtimeProcessor] Error finding sublines with buses heading to station ID ${targetStation.id}:`, error);
+    // Depending on requirements, might return an empty array or re-throw
+    return [];
+  }
+}
 // --- Output Broadcasting Functions (to be injected) ---
 
 /**
@@ -709,4 +930,4 @@ function stop() {
 }
 
 // Export the processing function and the injection/start/stop functions
-module.exports = { processLocationData, start, stop, injectBroadcastFunction, activeBusStates };
+module.exports = { processLocationData, start, stop, injectBroadcastFunction, activeBusStates, getSublinesWithBusesToStation };

@@ -1,5 +1,6 @@
 // src/controllers/stopController.js
 const { pool } = require('../config/database');
+const { getSublinesWithBusesToStation } = require('../services/realtimeProcessor'); // Import the new function
 
 const getAllStops = async (req, res) => {
   try {
@@ -218,8 +219,56 @@ const getStopById = async (req, res) => {
   }
 };
 
+// Example controller function for the route
+const getDeparturesForStation = async (req, res) => {
+  try {
+    const { stationCode } = req.params;
+    const numberOfDepartures = parseInt(req.query.res) || 10; // Use 'res' as per your original example, default to 10
+
+    // First, find the station details using its code from the database
+    const stationQuery = 'SELECT id, cod, lat, lon, nam FROM "Stop" WHERE cod = $1';
+    const stationResult = await pool.query(stationQuery, [stationCode]);
+
+    if (stationResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Station not found' });
+    }
+
+    const targetStation = stationResult.rows[0]; // Get the station object
+
+    // Now, call the new function to find active buses heading to this station
+    const departures = await getSublinesWithBusesToStation(targetStation, numberOfDepartures);
+
+    // Format the response similarly to your original API example if needed
+    // This is a basic example, adjust the structure as required by your frontend
+    // The format might need to match the original TIB API response structure closely
+    const formattedResponse = departures.map(dep => ({
+      // Map the fields from the function's return object to your desired API response format
+      // Example mapping, adjust based on your exact needs and the original API format:
+      rt_id: dep.rt_id, // The subline ID
+      bus_id: dep.bus_id, // The bus identifier
+      estimated_arrival_time: dep.estimated_arrival_at_station, // ISO string or null
+      estimated_minutes: dep.estimated_time_seconds === Infinity ? null : Math.round(dep.estimated_time_seconds / 60), // Convert seconds to minutes and round, or null
+      distance_to_stop: dep.distance_to_station_meters, // In meters
+      // Add other fields as needed, potentially fetching subline code/name from the DB if required
+      // subline_code: ... (fetch if needed)
+      // subline_name: ... (fetch if needed)
+      // type: "esta-info", // If the frontend expects this specific type
+      // ... other fields ...
+    }));
+
+    res.status(200).json({
+      success: true,
+       formattedResponse, // Send the list of upcoming departures
+    });
+
+  } catch (error) {
+    console.error('Error fetching departures for station:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
 module.exports = {
   getAllStops,
   getStopByCod,
   getStopById,
+  getDeparturesForStation
 };
