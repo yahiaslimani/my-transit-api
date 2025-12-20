@@ -139,7 +139,6 @@ server.on('upgrade', (request, socket, head) => {
 wss.on('connection', (ws, request, connectionType, routeId) => {
   if (connectionType === 'driver') {
     console.log('Driver app connected to /api/driver-location-ws');
-
     // Handle messages from the driver's phone app
     ws.on('message', (data) => {
       try {
