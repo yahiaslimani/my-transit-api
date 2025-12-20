@@ -65,15 +65,15 @@ function broadcastToRouteClients(rt_id, message) {
                 client.send(messageStr);
               }
             });
-            console.log(`[Broadcast] Sent message to ${clients.size} client(s) on route ${routeId} (from rt_id ${rtId})`);
+            console.log(`[Broadcast] Sent message to ${clients.size} client(s) on route ${routeId} (from rt_id ${rt_id})`);
           } else {
             // console.log(`[Broadcast] No active clients for route ${routeId} (from rt_id ${rtId}), message not sent:`, messageStr); // Log only if needed frequently
           }
       } else {
-          console.warn(`[Broadcast] Could not determine main routeId for rt_id ${rtId}, cannot broadcast.`);
+          console.warn(`[Broadcast] Could not determine main routeId for rt_id ${rt_id}, cannot broadcast.`);
       }
   }).catch(error => {
-      console.error(`[Broadcast] Error getting main route ID for rt_id ${rtId}:`, error);
+      console.error(`[Broadcast] Error getting main route ID for rt_id ${rt_id}:`, error);
   });
 }
 
