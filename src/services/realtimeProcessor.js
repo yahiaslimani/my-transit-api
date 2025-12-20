@@ -453,7 +453,7 @@ async function processLocationData(rawData) {
      };
      // Broadcast the 'close' message using the injected function
      if (broadcastToRouteClientsFunction) {
-         injectBroadcastFunction(closeMessage);
+         broadcastToRouteClientsFunction(closeMessage);
          console.log(`[${busId}] Sent 'close' message for old subline rt_id ${previousSublineRtId}.`);
      } else {
          console.warn(`[${busId}] Broadcast function not available, cannot send 'close' message for old subline rt_id ${previousSublineRtId}.`);
@@ -480,7 +480,7 @@ async function processLocationData(rawData) {
 
     // Broadcast the message using the injected function
     if (broadcastToRouteClientsFunction) {
-        injectBroadcastFunction(positionMessage);
+        broadcastToRouteClientsFunction(positionMessage);
         console.log(`[${busId}] Sent 'position' message for subline rt_id ${currentSublineRtId} at (${lat}, ${lng}), vel ${velocityKmh.toFixed(2)} km/h`);
     } else {
         console.warn(`[${busId}] Broadcast function not available, cannot send 'position' message for subline rt_id ${currentSublineRtId}.`);
@@ -620,7 +620,7 @@ async function processLocationData(rawData) {
 
                 // Broadcast the 'esta-info' message using the injected function
                 if (broadcastToRouteClientsFunction) {
-                    injectBroadcastFunction(estaInfoMessage);
+                    broadcastToRouteClientsFunction(estaInfoMessage);
                     console.log(`[${busId}] Sent 'esta-info' message for subline rt_id ${currentSublineRtId}, next stop: ${upcomingStopsList[0]?.stop_nam ?? 'None'}`);
                 } else {
                     console.warn(`[${busId}] Broadcast function not available, cannot send 'esta-info' message for subline rt_id ${currentSublineRtId}.`);
@@ -648,7 +648,7 @@ async function processLocationData(rawData) {
                     }
                 };
                 if (broadcastToRouteClientsFunction) {
-                    injectBroadcastFunction(emptyEstaInfoMessage);
+                    broadcastToRouteClientsFunction(emptyEstaInfoMessage);
                     console.log(`[${busId}] Sent 'esta-info' message with empty stops list for subline rt_id ${currentSublineRtId} (likely near end of route).`);
                 } else {
                     console.warn(`[${busId}] Broadcast function not available, cannot send empty 'esta-info' message for subline rt_id ${currentSublineRtId}.`);
