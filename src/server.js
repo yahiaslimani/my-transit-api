@@ -51,14 +51,11 @@ const passengerConnectionsByRoute = new Map();
 
 // --- NEW: Broadcast Function for Specific Routes ---
 // This function will be called by the realtimeProcessor
-function broadcastToRouteClients(rtId, message) {
-  console.log("yahia");
-  console.log(rtId);
-  console.log(message);
+function broadcastToRouteClients(rt_id, message) {
   
   // Determine the main routeId from the rt_id (e.g., if rt_id is 1011, routeId might be 101)
   // You need to implement this helper function to map the subline ID back to the main line ID.
-  getMainRouteIdFromRtId(rtId).then(routeId => {
+  getMainRouteIdFromRtId(rt_id).then(routeId => {
       if (routeId) {
           const clients = passengerConnectionsByRoute.get(routeId.toString()); // Ensure routeId is a string for the map key
           if (clients && clients.size > 0) {
