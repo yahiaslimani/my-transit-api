@@ -796,6 +796,8 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
     console.log(activeBusStates.entries());
     
     for (const [busId, busState] of activeBusStates.entries()) {
+      console.log("busState");
+      console.log(busState);
       const currentRtId = busState.currentSublineRtId; // Use the determined subline ID (SubLine.id)
 
       // Check if the bus's current rt_id matches one of the sublines serving the target station
