@@ -234,7 +234,7 @@ const getDeparturesForStation = async (req, res) => {
     }
 
     const targetStation = stationResult.rows[0]; // Get the station object
-
+    console.log("stationCOde= " + targetStation);
     // Now, call the new function to find active buses heading to this station
     const departures = await getSublinesWithBusesToStation(targetStation, numberOfDepartures);
 
