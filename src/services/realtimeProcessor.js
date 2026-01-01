@@ -369,6 +369,9 @@ async function processLocationData(rawData) {
 
   // --- Retrieve/Initialize Bus State ---
   let busState = activeBusStates.get(busId) || {
+    lat: null,
+    lng: null,
+    velocity: null,
     history: [], // Store recent coordinates
     mainRtId: null, // Store the main routeId (e.g., 3227) the bus is assigned to
     currentSublineRtId: null, // Store the determined *subline* rt_id (e.g., 1189 or 1190) the bus is currently on
@@ -381,6 +384,9 @@ async function processLocationData(rawData) {
   // --- Update History ---
   // Add the new location to the history
   busState.history.push({ lat: currentLat, lng: currentLng, timestamp: currentTimestamp });
+  busState.lat = currentLat;
+  busState.lng = currentLng;
+  busState.velocity = currentVel * 3.6;
   // Keep only the last N points (e.g., 5) to manage memory and focus on recent movement
   const HISTORY_SIZE = 5;
   if (busState.history.length > HISTORY_SIZE) {
