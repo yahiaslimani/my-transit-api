@@ -559,7 +559,7 @@ async function processLocationData(rawData) {
 
             // Loop through the stops *after* the closest one found in the sequence
             // These are the "upcoming" stops based on the determined direction (subline path).
-            for (let i = closestStopIndexInSequence + 1; i < stopsOnSubline.length; i++) {
+            for (let i = closestStopIndexInSequence /*+ 1*/; i < stopsOnSubline.length; i++) {
                 const stop = stopsOnSubline[i];
 
                 // Calculate estimated distance and time to this specific stop
