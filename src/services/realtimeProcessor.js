@@ -276,6 +276,7 @@ async function matchBusToSublineByHistoryAndRoute(busId, mainRouteId, coordHisto
 
   // --- Compare Bus Bearing to Route Segment Bearings (Only on Sublines for this Route) ---
   let bestMatchSublineId = null;
+  let nextBestStopId = null;
   let bestMatchScore = -Infinity; // Higher score is better
 
   for (const [sublineId, stopsOnSubline] of sublineStopsMap.entries()) {
@@ -315,6 +316,7 @@ async function matchBusToSublineByHistoryAndRoute(busId, mainRouteId, coordHisto
         if (score > bestMatchScore) {
           bestMatchScore = score;
           bestMatchSublineId = sublineId; // Use the subline ID (which is the rt_id for broadcasting)
+          nextBestStopId = stopB.id;
           console.log(`[${busId}]     Potential best match found! Subline (rt_id): ${sublineId}, Score: ${score.toFixed(2)}, Bus Bearing: ${avgBearing.toFixed(2)}°, Segment Bearing: ${routeSegmentBearing.toFixed(2)}°, Diff: ${angleDiff.toFixed(2)}°`);
         }
       } else {
@@ -530,11 +532,14 @@ async function processLocationData(rawData) {
         // This determines where the bus is in the sequence.
         let closestStopIndexInSequence = -1;
         let minDistanceToAnyStopInSequence = Infinity;
-
+        console.log("yahiaaaaaaaaaaaaaaaaaaaaaa");
+        console.log(stopsOnSubline);
         for (let i = 0; i < stopsOnSubline.length; i++) {
             const stop = stopsOnSubline[i];
+            
+            console.log(stop);
             const distanceToStop = haversineDistance(currentLat, currentLng, stop.lat, stop.lon);
-
+            console.log(distanceToStop);
             // Check for NaN from haversineDistance
             if (isNaN(distanceToStop)) {
                  console.error(`[${busId}] haversineDistance returned NaN for stop ${stop.id} (${stop.nam}). Skipping.`);
@@ -590,12 +595,7 @@ async function processLocationData(rawData) {
                     esta_time: estimatedTimeToThisStop, // Estimated arrival time at the *first* upcoming stop found
                 });
 
-                // For simplicity in this basic example, let's limit the list to the next few upcoming stops
-                // and recalculate 'esta_dist' and 'esta_time' for each one relative to the bus's *current* position.
-                // A production system would likely calculate these based on the route path and predicted travel times between stops.
-                if (upcomingStopsList.length >= 5) { // e.g., show next 5 stops
-                    break;
-                }
+                
             }
 
             if (upcomingStopsList.length > 0) {
