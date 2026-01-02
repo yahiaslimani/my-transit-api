@@ -724,7 +724,7 @@ function findUpcomingStopsOnSubline(stopsOnSubline, currentLat, currentLng) {
   }
 
   // The upcoming stops are those *after* the closest one found in the sequence
-  const upcomingStops = stopsOnSubline.slice(closestStopIndexInSequence + 1);
+  const upcomingStops = stopsOnSubline.slice(closestStopIndexInSequence);
 
   console.log(`[RealtimeProcessor] Found ${upcomingStops.length} upcoming stops after closest stop index ${closestStopIndexInSequence} on subline.`);
 
