@@ -10,6 +10,8 @@ const stopRoutes = require('./routes/stops');
 const lineRoutes = require('./routes/lines');
 const sublineRoutes = require('./routes/sublines');
 const { injectBroadcastFunction, start: startRealtimeProcessor, stop: stopRealtimeProcessor, processLocationData } = require('./services/realtimeProcessor'); // Import processor functions
+const authRoutes = require('./routes/auth'); // Import the auth routes
+const driverRoutes = require('./routes/drivers'); // Import the driver routes
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +31,9 @@ app.use('/api/kml', express.static(routePathsDir));
 app.use('/api/stops', stopRoutes);
 app.use('/api/lines', lineRoutes);
 app.use('/api/sublines', sublineRoutes);
+app.use('/api/auth', authRoutes);
+// Add the driver routes (these will be protected by middleware)
+app.use('/api/drivers', driverRoutes); // Mount the driver routes under /api/drivers
 
 // Use error handler middleware
 app.use(errorHandler);
