@@ -244,8 +244,12 @@ const getDeparturesForStation = async (req, res) => {
     const formattedResponse = departures.map(dep => ({
       // Map the fields from the function's return object to your desired API response format
       // Example mapping, adjust based on your exact needs and the original API format:
-      rt_id: dep.rt_id, // The subline ID
+      subline_id: dep.rt_id, // The subline ID
+      subline_name: dep.subline_name,
+      route_id: dep.route_id,
+      route_name: dep.route_name,
       bus_id: dep.bus_id, // The bus identifier
+      last_bus_coordinates: dep.last_bus_coordinates,
       estimated_arrival_time: dep.estimated_arrival_at_station, // ISO string or null
       estimated_minutes: dep.estimated_time_seconds === Infinity ? null : Math.round(dep.estimated_time_seconds / 60), // Convert seconds to minutes and round, or null
       distance_to_stop: dep.distance_to_station_meters, // In meters
@@ -258,7 +262,7 @@ const getDeparturesForStation = async (req, res) => {
 
     res.status(200).json({
       success: true,
-       formattedResponse, // Send the list of upcoming departures
+      departures: formattedResponse, // Send the list of upcoming departures
     });
 
   } catch (error) {

@@ -811,6 +811,12 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
         const currentLat = busState.lat;
         const currentLng = busState.lng;
         const currentVel = busState.velocity; // Assuming m/s
+        
+        // Validate bus coordinates before proceeding
+        if (typeof currentLat !== 'number' || typeof currentLng !== 'number' || isNaN(currentLat) || isNaN(currentLng)) {
+            console.warn(`[RealtimeProcessor] Invalid current coordinates for bus ${busId} (rt_id ${currentRtId}). Skipping.`);
+            continue;
+        }
 
         const stopsOnBusSubline = stopsBySubline.get(currentRtId);
 
@@ -859,30 +865,68 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
               estimatedTimeSeconds = Infinity; // Or null, depending on how the frontend handles it
               estimatedArrivalTime = null; // Or a specific string like "N/A"
           }
+          // --- FETCH ADDITIONAL INFO: Main Route ID, Route Name, Subline Name ---
+          let routeId = null;
+          let routeName = null;
+          let sublineName = null;
+          let lastBusCoordinates = null;
+          try {
+              // Query to get main RouteLine ID, Name, and SubLine Name using the currentRtId (SubLine.id)
+              const routeInfoQuery = `
+                SELECT rl.id AS route_line_id, rl.nam AS route_line_name, sl.nam AS subline_name
+                FROM "SubLine" sl
+                JOIN "RouteLine" rl ON sl.lineid = rl.id
+                WHERE sl.id = $1;
+              `;
+              const routeInfoResult = await pool.query(routeInfoQuery, [currentRtId]);
+              if (routeInfoResult.rows.length > 0) {
+                  routeId = routeInfoResult.rows[0].route_line_id;
+                  routeName = routeInfoResult.rows[0].route_line_name;
+                  sublineName = routeInfoResult.rows[0].subline_name;
+              } else {
+                  console.error(`[RealtimeProcessor] Could not find route/subline info for rt_id ${currentRtId}.`);
+              }
+          } catch (dbError) {
+              console.error(`[RealtimeProcessor] Error fetching route/subline info for rt_id ${currentRtId}:`, dbError);
+          }
 
+          // --- GET Last Bus Coordinates from History ---
+          // The history is an array of {lat, lng, timestamp}, get the last entry
+          if (busState.history && busState.history.length > 0) {
+              // Get the last element of the history array
+              const lastHistoryEntry = busState.history[busState.history.length - 1];
+              if (lastHistoryEntry && typeof lastHistoryEntry.lat === 'number' && typeof lastHistoryEntry.lng === 'number') {
+                  lastBusCoordinates = { lat: lastHistoryEntry.lat, lng: lastHistoryEntry.lng };
+              } else {
+                  console.warn(`[RealtimeProcessor] Invalid last history entry for bus ${busId}:`, lastHistoryEntry);
+              }
+          } else {
+              console.log(`[RealtimeProcessor] No history available for bus ${busId} to get last coordinates.`);
+          }
           // Find the subline details from the initial query result (or potentially fetch name/code separately if needed)
           // For now, we'll use the rt_id (subline.id) itself and get name/code if required by the API spec later.
           // Assume we have subline details from the initial fetch if needed for response formatting.
 
           // Add this potential departure to the list
+          // Add this potential departure to the list
           potentialDepartures.push({
             // Subline info (from DB query - this is the rt_id)
             rt_id: currentRtId, // This is the SubLine.id
-            // Optional: Add subline code, name if needed for the API response
-            // subline_code: ... (fetch from SubLine table if not already cached)
-            // subline_name: ... (fetch from SubLine table if not already cached)
+            route_id: routeId, // Main RouteLine ID
+            route_name: routeName, // Main RouteLine Name
+            subline_name: sublineName, // Specific SubLine Name (e.g., "L101-1 - Way")
 
             // Bus info (from activeBusStates)
             bus_id: busId,
-            current_pos: { lat: currentLat, lng: currentLng },
             current_vel: currentVel, // m/s
+            last_bus_coordinates: lastBusCoordinates, // Last coordinates from the history array
             estimated_arrival_at_station: estimatedArrivalTime?.toISOString() ?? null, // ISO string or null if not calculable
             estimated_time_seconds: estimatedTimeSeconds, // Raw time in seconds (can be Infinity)
             distance_to_station_meters: distanceToTarget, // Raw distance in meters
             // Add other bus-specific info if needed (e.g., passenger count if available from phone app data)
           });
 
-          console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}) is heading towards station ${targetStationId} (index ${targetStopIndex}). Est. time: ${estimatedTimeSeconds}s.`);
+          console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}, route ${routeId}) is heading towards station ${targetStationId} (index ${targetStopIndex}). Est. time: ${estimatedTimeSeconds}s.`);
         } else {
             // The target station is *before* or *at* the bus's current position in the sequence, so it's not upcoming.
             console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}) is past or at the target station ${targetStationId} (current seq index: ${closestStopIndex}, target seq index: ${targetStopIndex}).`);
