@@ -848,7 +848,7 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
         // 4. Determine if the target station is in the list of upcoming stops
         // This means the bus is currently located *before* the target station in the subline's sequence.
         // A simple check: is the target stop's index *after* the closest stop's index?
-        if (targetStopIndex > closestStopIndex) {
+        if (targetStopIndex >= closestStopIndex) {
           // Calculate estimated time/distance to the target station
           // This is a basic estimate using haversine distance and current speed along the *straight line*.
           // A more accurate estimate would use the route path geometry between stops.
@@ -935,7 +935,7 @@ async function getSublinesWithBusesToStation(targetStation, numberOfDepartures) 
           console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}, route ${routeId}) is heading towards station ${targetStationId} (index ${targetStopIndex}). Est. time: ${estimatedTimeSeconds}s.`);
         } else {
             // The target station is *before* or *at* the bus's current position in the sequence, so it's not upcoming.
-            console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}) is past or at the target station ${targetStationId} (current seq index: ${closestStopIndex}, target seq index: ${targetStopIndex}).`);
+            console.log(`[RealtimeProcessor] Bus ${busId} (rt_id ${currentRtId}) is past the target station ${targetStationId} (current seq index: ${closestStopIndex}, target seq index: ${targetStopIndex}).`);
         }
       }
       // else: Bus is on a subline not serving the target station, ignore it.
