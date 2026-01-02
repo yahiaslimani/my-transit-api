@@ -244,9 +244,11 @@ const getDeparturesForStation = async (req, res) => {
     const formattedResponse = departures.map(dep => ({
       // Map the fields from the function's return object to your desired API response format
       // Example mapping, adjust based on your exact needs and the original API format:
-      subline_id: dep.rt_id, // The subline ID
+      subline_id: dep.subline_id, // The subline ID
+      subline_code: dep.subline_code,
       subline_name: dep.subline_name,
       route_id: dep.route_id,
+      route_code: dep.route_code,
       route_name: dep.route_name,
       bus_id: dep.bus_id, // The bus identifier
       last_bus_coordinates: dep.last_bus_coordinates,
