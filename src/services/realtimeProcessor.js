@@ -509,6 +509,8 @@ async function processLocationData(rawData) {
          // This function fetches stops for ALL sublines of the main route.
          // We then need to pick the stops for the specific currentSublineRtId.
          const allStopsForMainRoute = await getOrderedStopsForRouteSublines(mainRouteId); // Fetch stops for the main route
+         console.log("fadwa");
+         console.log(allStopsForMainRoute);
          if (allStopsForMainRoute && allStopsForMainRoute.has(currentSublineRtId)) { // Check if the specific subline ID exists in the map
              busState.stopsForCurrentSublineRtId = { rtId: currentSublineRtId, stops: allStopsForMainRoute.get(currentSublineRtId) }; // Get stops for the specific subline ID
              console.log(`[${busId}] Cached ${busState.stopsForCurrentSublineRtId.stops.length} stops for subline rt_id ${currentSublineRtId}`);
