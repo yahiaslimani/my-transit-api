@@ -12,6 +12,7 @@ const sublineRoutes = require('./routes/sublines');
 const { injectBroadcastFunction, start: startRealtimeProcessor, stop: stopRealtimeProcessor, processLocationData } = require('./services/realtimeProcessor'); // Import processor functions
 const authRoutes = require('./routes/auth'); // Import the auth routes
 const driverRoutes = require('./routes/drivers'); // Import the driver routes
+const busRoutes = require('./routes/buses'); // Import the new buses routes
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,6 +35,7 @@ app.use('/api/sublines', sublineRoutes);
 app.use('/api/auth', authRoutes);
 // Add the driver routes (these will be protected by middleware)
 app.use('/api/drivers', driverRoutes); // Mount the driver routes under /api/drivers
+app.use('/api/buses', busRoutes);
 
 // Use error handler middleware
 app.use(errorHandler);
